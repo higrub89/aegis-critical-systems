@@ -1,0 +1,35 @@
+name: AEGIS Critical Systems CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  audit-and-verify:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install systems toolchain and verification utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake valgrind sqlite3 libxml2-utils openjdk-21-jdk-headless
+
+      - name: Setup Rust toolchain with Clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Execute full qualification audit (C17, C++23, Rust no_std, Java 21, Valgrind, S1000D)
+        run: make audit
+
+      - name: Execute ASan, UBSan, and TSan sanitizers
+        run: make sanitizers
+
+      - name: Generate gcov line coverage report
+        run: make coverage

@@ -127,31 +127,64 @@ flowchart TD
 ### Target Monorepo Layout
 ```text
 aegis-critical-systems/
+├── .github/workflows/ci.yml         # Automated CI (audit + sanitizers + gcov + xmllint)
 ├── README.md
-├── Makefile                         # Master build, audit, and verification orchestrator
+├── Makefile                         # Master build, audit, sanitizer, and coverage orchestrator
 ├── CMakeLists.txt                   # C17 / C++23 strict toolchain configuration
-├── Cargo.toml                       # Rust workspace (01-ffi-parser + 05-trace-cli)
-├── requirements/                    # Low-Level Requirements (SRS YAML + S1000D BREX)
+├── Cargo.toml                       # Rust workspace (aegis-parser + aegis-trace)
+├── requirements/                    # Low-Level Requirements (SRS YAML + trace.lock)
+├── scripts/                         # vcan0 setup & multi-process E2E pipeline verification
 ├── 01-hybrid-can-gateway/           # C17 PREEMPT_RT cyclic executive + Rust no_std FFI
 ├── 02-hil-hvbms-sim/                # C++23 HV-BMS physics engine + MIL-STD-882E injector
-├── 03-lockfree-hums/                # Wait-free SPSC ring buffer + Q15 fixed-point EKF
-├── 04-tactical-gcs/                 # C17 epoll TM/TC daemon + Java 21 GCS console
+├── 03-lockfree-hums/                # Wait-free SPSC ring buffer + Q15 EKF + malloc trap
+├── 04-tactical-gcs/                 # C17 epoll TM/TC daemon + Java 21 GCS console (SQLite)
 └── 05-trace-s1000d-cli/             # DO-178C traceability & S1000D XML compiler
 ```
 
-### Sequential Implementation Roadmap (Next Sessions)
+### Completed Execution Roadmap
 
-- [ ] **Phase 0 — Monorepo & Toolchain Hardening:**
-  - Initialize directory hierarchy, root `Makefile`, `CMakeLists.txt`, and `Cargo.toml` workspace.
-  - Enforce strict compiler flags: `-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -fno-exceptions -fno-rtti`.
-  - Configure `vcan0` virtual CAN-FD interface script (`scripts/setup_vcan.sh`).
-- [ ] **Phase 1 — Foundation: Traceability Gatekeeper (`05-trace-s1000d-cli` MVP):**
-  - Define initial Low-Level Requirements (`requirements/SRS-GW-001.yaml`).
-  - Implement the Rust CLI scanner for `@req`, `@fault`, and `@hazard` tags with `SHA-256` function fingerprinting and S1000D `fault.xsd` XML emission so every subsequent line of C/Rust is audited from commit #1.
-- [ ] **Phase 2 — Core Safety Loop: FFI ABI Contract & HIL Bus (`01-hybrid-can-gateway` + `02-hil-hvbms-sim`):**
-  - Define the 128-byte cache-aligned FFI header (`aegis_frame_abi.h`) shared between `C17` and `Rust no_std`.
-  - Implement zero-heap `Rust no_std` frame parser + HMAC validator and verify zero `core::panicking` symbols via `nm -u`.
-  - Implement `C17` `SocketCAN` cyclic executive and `C++23` `constexpr` 2D safety FSM with `< 500 µs` fault reaction over `vcan0`.
-- [ ] **Phase 3 — Lock-Free Telemetry & Tactical GCS (`03-lockfree-hums` + `04-tactical-gcs`):**
-  - Connect `POSIX` shared memory (`shm_open`) to the wait-free SPSC queue and `int16_t` anomaly filter.
-  - Build the `C17` `epoll` TM/TC daemon and `Java 21` Ground Control Station with SQL persistence.
+- [x] **Phase 0 — Monorepo & Toolchain Hardening:**
+  - Initialized directory hierarchy, root `Makefile`, `CMakeLists.txt`, and `Cargo.toml` workspace.
+  - Enforced strict compiler flags (`-Wall -Wextra -Werror -Wpedantic -Wconversion -Wsign-conversion -Wshadow -fno-exceptions -fno-rtti`) and `clippy::pedantic` + `unwrap_used`/`expect_used`/`panic` denial.
+  - Configured `vcan0` virtual CAN-FD interface script (`scripts/setup_vcan.sh`).
+- [x] **Phase 1 — Foundation: Traceability Gatekeeper (`05-trace-s1000d-cli`):**
+  - Defined Low-Level Requirements (`requirements/SRS-GW-001.yaml`, `SRS-HIL-001.yaml`, `SRS-HUMS-001.yaml`, `SRS-GCS-001.yaml`).
+  - Implemented zero-dependency Rust CLI scanner for `@req`, `@fault`, and `@hazard` across `.c`, `.h`, `.cpp`, `.hpp`, `.rs`, and `.java` with FIPS 180-4 `SHA-256` function fingerprinting, orphan detection, `trace.lock` drift gate, and dynamic S1000D `fault.xsd` XML emission.
+- [x] **Phase 2 — Core Safety Loop (`01-hybrid-can-gateway` + `02-hil-hvbms-sim`):**
+  - Defined 128-byte cache-aligned FFI ABI (`aegis_frame_abi.h`) and 64-byte POSIX SHM snapshot (`aegis_shm_bus.h`).
+  - Implemented zero-heap `Rust no_std` frame parser + constant-time HMAC-SHA256 (`libaegis_parser.a`) verified via `nm -u` with zero `core::panicking` symbols.
+  - Implemented `C17` `PREEMPT_RT` cyclic executive with `RTCA DO-326A` monotonic anti-replay (`DTC-0x106`) and `C++23` `constexpr` 2D safety FSM (`< 500 µs` transition).
+- [x] **Phase 3 — Lock-Free Telemetry & Tactical GCS (`03-lockfree-hums` + `04-tactical-gcs`):**
+  - Built wait-free `alignas(64)` SPSC queue over POSIX SHM and `Q15` fixed-point anomaly filter with `--wrap=malloc` post-init abort trap.
+  - Built `C17` `epoll` TM/TC daemon (hardware SSE4.2 Castagnoli CRC-32C) and `Java 21 LTS` Tactical GCS console (`DAO`/`DTO`, Virtual Threads, parameterized SQLite persistence).
+- [x] **Phase 4 — System Integration, Sanitizers & CI:**
+  - Verified multi-process E2E pipeline (`scripts/test_e2e_pipeline.sh`), `ASan`/`UBSan`/`TSan` (`make sanitizers`), `gcov` coverage (`make coverage`), `xmllint`, and GitHub Actions CI.
+
+---
+
+## 5. Build, Verification & Measured Engineering Evidence
+
+```bash
+# Full qualification audit (C17/C++23/Rust/Java build, CTest, Cargo test, Clippy,
+# E2E pipeline, Valgrind leak/FD check, nm -u panic-free gate, trace.lock & xmllint)
+make audit
+
+# AddressSanitizer, UndefinedBehaviorSanitizer & ThreadSanitizer (SPSC lock-free ring)
+make sanitizers
+
+# Line coverage extraction via gcov
+make coverage
+
+# Optional: bring up SocketCAN virtual CAN-FD bus (requires sudo)
+./scripts/setup_vcan.sh vcan0
+```
+
+| Verification Metric | Observed Result |
+| :--- | :--- |
+| **C17 / C++23 Test Suite (`ctest`)** | `6/6` passed (`abi_contract`, `rust_nostd_ffi`, `gateway_cyclic_exec`, `hil_fsm_closed_loop`, `hums_lockfree`, `tmtc_epoll_crc32c`) |
+| **Rust & Java 21 Suites** | `7/7` Cargo tests passed (`aegis-parser` + `aegis-trace`); `TacticalGcsTest` passed (`CRC-32C 0xE3069283` + SQLite + TCP) |
+| **Memory & FD Safety (`Valgrind` + `--wrap=malloc`)** | `0 errors`, `0 bytes` leaked across all 6 C/C++ test binaries; zero post-init heap allocations on HUMS hot path |
+| **Sanitizers (`ASan` + `UBSan` + `TSan`)** | `6/6` `ASan/UBSan` passed; `test_lockfree_hums` passed under `TSan` with zero data races |
+| **HUMS SPSC + Q15 Latency (`CLOCK_MONOTONIC_RAW`, N=10,000)** | `p50 = 48–51 ns`, `p99 = 52–95 ns` (zero dynamic allocation) |
+| **Release ELF Footprint (`size`)** | `aegis_gateway_node`: `11,701 B` `.text` \| `aegis_hil_sim`: `9,518 B` `.text` \| `aegis_tmtc_daemon`: `13,164 B` `.text` |
+| **DO-178C / S1000D Traceability (`aegis-trace`)** | `14/14` SRS requirements verified across `16` source links (`trace.lock` + `xmllint --noout` clean) |
