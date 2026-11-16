@@ -12,6 +12,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+# define AEGIS_ALIGNAS(x)               alignas(x)
+# define AEGIS_ALIGNOF(x)               alignof(x)
+# define AEGIS_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+extern "C" {
+#else
+# define AEGIS_ALIGNAS(x)               _Alignas(x)
+# define AEGIS_ALIGNOF(x)               _Alignof(x)
+# define AEGIS_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
+#endif
+
 #define AEGIS_ABI_CTX_SIZE        128U
 #define AEGIS_CACHELINE_SIZE      64U
 #define AEGIS_CANFD_MAX_DLEN      64U
@@ -46,25 +57,25 @@
  */
 typedef struct s_aegis_frame_ctx
 {
-    _Alignas(AEGIS_CACHELINE_SIZE) struct canfd_frame raw_frame;
-    uint64_t                                          rx_timestamp_ns;
-    uint64_t                                          auth_timestamp_ns;
-    uint32_t                                          seq_counter;
-    uint16_t                                          status_flags;
-    uint16_t                                          dtc_code;
-    uint8_t                                           hmac_tag[AEGIS_HMAC_TAG_LEN];
+    AEGIS_ALIGNAS(AEGIS_CACHELINE_SIZE) struct canfd_frame raw_frame;
+    uint64_t                                               rx_timestamp_ns;
+    uint64_t                                               auth_timestamp_ns;
+    uint32_t                                               seq_counter;
+    uint16_t                                               status_flags;
+    uint16_t                                               dtc_code;
+    uint8_t                                                hmac_tag[AEGIS_HMAC_TAG_LEN];
 } t_aegis_frame_ctx;
 
-_Static_assert(sizeof(struct canfd_frame) == 72U,
-               "Linux canfd_frame must be exactly 72 bytes");
-_Static_assert(sizeof(t_aegis_frame_ctx) == AEGIS_ABI_CTX_SIZE,
-               "ABI size mismatch: t_aegis_frame_ctx must be 128 bytes");
-_Static_assert(_Alignof(t_aegis_frame_ctx) == AEGIS_CACHELINE_SIZE,
-               "ABI alignment mismatch: t_aegis_frame_ctx must be 64B aligned");
-_Static_assert(offsetof(t_aegis_frame_ctx, rx_timestamp_ns) == 72U,
-               "ABI offset mismatch: rx_timestamp_ns must start at byte 72");
-_Static_assert(offsetof(t_aegis_frame_ctx, hmac_tag) == 96U,
-               "ABI offset mismatch: hmac_tag must start at byte 96");
+AEGIS_STATIC_ASSERT(sizeof(struct canfd_frame) == 72U,
+                    "Linux canfd_frame must be exactly 72 bytes");
+AEGIS_STATIC_ASSERT(sizeof(t_aegis_frame_ctx) == AEGIS_ABI_CTX_SIZE,
+                    "ABI size mismatch: t_aegis_frame_ctx must be 128 bytes");
+AEGIS_STATIC_ASSERT(AEGIS_ALIGNOF(t_aegis_frame_ctx) == AEGIS_CACHELINE_SIZE,
+                    "ABI alignment mismatch: t_aegis_frame_ctx must be 64B aligned");
+AEGIS_STATIC_ASSERT(offsetof(t_aegis_frame_ctx, rx_timestamp_ns) == 72U,
+                    "ABI offset mismatch: rx_timestamp_ns must start at byte 72");
+AEGIS_STATIC_ASSERT(offsetof(t_aegis_frame_ctx, hmac_tag) == 96U,
+                    "ABI offset mismatch: hmac_tag must start at byte 96");
 
 /* Decoded propulsion & HV-BMS telemetry (12 bytes, C17 / Rust #[repr(C)]) */
 typedef struct s_aegis_telemetry_data
@@ -76,8 +87,8 @@ typedef struct s_aegis_telemetry_data
     uint8_t  fault_mask;
 } t_aegis_telemetry_data;
 
-_Static_assert(sizeof(t_aegis_telemetry_data) == 12U,
-               "ABI size mismatch: t_aegis_telemetry_data must be 12 bytes");
+AEGIS_STATIC_ASSERT(sizeof(t_aegis_telemetry_data) == 12U,
+                    "ABI size mismatch: t_aegis_telemetry_data must be 12 bytes");
 
 int aegis_frame_ctx_init(t_aegis_frame_ctx *ctx);
 int aegis_frame_validate_bounds(t_aegis_frame_ctx *ctx);
@@ -92,5 +103,9 @@ int32_t aegis_rust_process_frame(t_aegis_frame_ctx *ctx,
 int32_t aegis_rust_compute_hmac(t_aegis_frame_ctx *ctx,
                                 const uint8_t *key,
                                 size_t key_len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* AEGIS_FRAME_ABI_H */

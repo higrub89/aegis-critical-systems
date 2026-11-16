@@ -113,4 +113,31 @@ if(EXISTS "${AEGIS_RUST_PARSER_LIB}")
     target_compile_options(test_gateway_exec PRIVATE ${AEGIS_C_FLAGS})
     target_link_options(test_gateway_exec PRIVATE -Wl,--gc-sections)
     add_test(NAME gateway_cyclic_exec_verification COMMAND test_gateway_exec)
+
+    # --------------------------------------------------------------------------
+    # Subsystem 02: HIL HV-BMS & Propulsion Simulator (C++23)
+    # --------------------------------------------------------------------------
+    add_library(aegis_hil_plant STATIC
+        02-hil-hvbms-sim/src/hvbms_plant.cpp
+    )
+    target_include_directories(aegis_hil_plant PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/02-hil-hvbms-sim/include
+    )
+    target_link_libraries(aegis_hil_plant PUBLIC aegis_gateway_rt)
+    target_compile_options(aegis_hil_plant PRIVATE ${AEGIS_CXX_FLAGS} -ffunction-sections -fdata-sections)
+
+    add_executable(aegis_hil_sim
+        02-hil-hvbms-sim/src/main_hil_sim.cpp
+    )
+    target_link_libraries(aegis_hil_sim PRIVATE aegis_hil_plant)
+    target_compile_options(aegis_hil_sim PRIVATE ${AEGIS_CXX_FLAGS})
+    target_link_options(aegis_hil_sim PRIVATE -Wl,--gc-sections)
+
+    add_executable(test_hil_fsm
+        02-hil-hvbms-sim/src/test_hil_fsm.cpp
+    )
+    target_link_libraries(test_hil_fsm PRIVATE aegis_hil_plant)
+    target_compile_options(test_hil_fsm PRIVATE ${AEGIS_CXX_FLAGS})
+    target_link_options(test_hil_fsm PRIVATE -Wl,--gc-sections)
+    add_test(NAME hil_fsm_closed_loop_verification COMMAND test_hil_fsm)
 endif()

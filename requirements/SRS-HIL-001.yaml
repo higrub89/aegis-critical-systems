@@ -1,0 +1,38 @@
+# ==============================================================================
+# AEGIS Critical Systems - Low-Level Software Requirements Specification (SRS)
+# Document ID: SRS-HIL-001
+# Standard: DO-178C DAL-A | MIL-STD-882E | MISRA C++:2023 | S1000D Issue 5.0 BREX
+# ==============================================================================
+document_id: SRS-HIL-001
+subsystem: 02-hil-hvbms-sim
+dal_level: DAL-A
+s1000d_dmc: DMC-AEGIS-A-24-30-02-00A-420A-A
+
+requirements:
+  - id: SRS-HIL-001
+    title: Zero-Indirection O(1) 2D Constexpr Safety FSM
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x201
+    description: >
+      The HV-BMS safety supervisor shall evaluate state transitions through a
+      compile-time 2D constexpr transition matrix indexed by [State][Event]
+      without std::variant, std::visit, or virtual dispatch, guaranteeing
+      SAFE_STATE contactor opening in < 500 microseconds.
+    isolation_action: >
+      Command immediate HV contactor open (STATE_SAFE) and latch DTC-0x201 upon
+      any critical thermal, over-current, or authentication violation event.
+
+  - id: SRS-HIL-002
+    title: Fixed-Point HV-BMS Physics Twin and MIL-STD-882E Fault Injection
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x202
+    description: >
+      The 1 kHz HV-BMS plant simulator shall compute voltage sag and thermal
+      runaway derivatives using deterministic fixed-point arithmetic and emit
+      authenticated 48-byte CAN-FD frames with configurable MIL-STD-882E fault
+      injection modes.
+    isolation_action: >
+      Detect thermal runaway (> 60.0 C) or EMI/authentication faults in the
+      closed-loop supervisor and open HV contactors before cell venting.

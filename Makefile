@@ -8,9 +8,12 @@ SHELL       := /bin/bash
 
 BUILD_DIR   := build
 REPORTS_DIR := reports
-SRS_SPEC    := requirements/SRS-GW-001.yaml
-S1000D_XML  := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-01-00A-420A-A.xml
-TRACE_MD    := $(REPORTS_DIR)/DO-178C-Traceability-Matrix.md
+SRS_SPEC      := requirements/SRS-GW-001.yaml
+S1000D_XML    := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-01-00A-420A-A.xml
+TRACE_MD      := $(REPORTS_DIR)/DO-178C-Traceability-Matrix.md
+SRS_HIL_SPEC  := requirements/SRS-HIL-001.yaml
+S1000D_HIL    := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-02-00A-420A-A.xml
+TRACE_HIL_MD  := $(REPORTS_DIR)/DO-178C-HIL-Traceability-Matrix.md
 
 .PHONY: all build-c build-rust test audit trace clean fclean re
 
@@ -30,6 +33,11 @@ trace: build-rust
 		--root . \
 		--out-xml $(S1000D_XML) \
 		--out-matrix $(TRACE_MD)
+	@./target/release/aegis-trace scan \
+		--srs $(SRS_HIL_SPEC) \
+		--root . \
+		--out-xml $(S1000D_HIL) \
+		--out-matrix $(TRACE_HIL_MD)
 
 test: all
 	@ctest --test-dir $(BUILD_DIR) --output-on-failure
@@ -43,6 +51,8 @@ audit: test
 		./$(BUILD_DIR)/test_rust_ffi
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_gateway_exec
+	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
+		./$(BUILD_DIR)/test_hil_fsm
 	@echo "[AEGIS-AUDIT] Undefined Reference Gate (libaegis_gateway_abi.a):"
 	@nm -u $(BUILD_DIR)/libaegis_gateway_abi.a
 	@echo "[AEGIS-AUDIT] Rust no_std Panic-Free Symbol Gate (aegis_parser object):"
