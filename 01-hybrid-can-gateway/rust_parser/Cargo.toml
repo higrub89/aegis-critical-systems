@@ -1,0 +1,15 @@
+[package]
+name = "aegis-parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Zero-heap Rust no_std CAN-FD frame parser and constant-time HMAC-SHA256 validator"
+
+[lib]
+name = "aegis_parser"
+path = "src/lib.rs"
+crate-type = ["staticlib", "rlib"]
+
+[lints]
+workspace = true

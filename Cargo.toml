@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "01-hybrid-can-gateway/rust_parser",
     "05-trace-s1000d-cli",
 ]
 
@@ -11,7 +12,7 @@ license = "MIT OR Apache-2.0"
 authors = ["Ruben Higuita <rhiguita@student.42madrid.com>"]
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 missing_docs = "warn"
 
 [workspace.lints.clippy]
@@ -22,3 +23,8 @@ expect_used = "deny"
 panic = "deny"
 todo = "deny"
 unimplemented = "deny"
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = 3

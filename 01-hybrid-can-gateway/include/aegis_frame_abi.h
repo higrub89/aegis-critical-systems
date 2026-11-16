@@ -21,6 +21,7 @@
 #define AEGIS_STATUS_INIT         0x0000U
 #define AEGIS_STATUS_VALID_LEN    0x0001U
 #define AEGIS_STATUS_AUTH_OK      0x0002U
+#define AEGIS_STATUS_PARSED_OK    0x0004U
 #define AEGIS_STATUS_FAULT_ACTIVE 0x8000U
 
 /* Diagnostic Trouble Codes (DTC) mapped to S1000D fault.xsd */
@@ -65,9 +66,31 @@ _Static_assert(offsetof(t_aegis_frame_ctx, rx_timestamp_ns) == 72U,
 _Static_assert(offsetof(t_aegis_frame_ctx, hmac_tag) == 96U,
                "ABI offset mismatch: hmac_tag must start at byte 96");
 
+/* Decoded propulsion & HV-BMS telemetry (12 bytes, C17 / Rust #[repr(C)]) */
+typedef struct s_aegis_telemetry_data
+{
+    uint32_t pack_voltage_mv;
+    int32_t  pack_current_ma;
+    int16_t  max_cell_temp_dc;
+    uint8_t  contactor_state;
+    uint8_t  fault_mask;
+} t_aegis_telemetry_data;
+
+_Static_assert(sizeof(t_aegis_telemetry_data) == 12U,
+               "ABI size mismatch: t_aegis_telemetry_data must be 12 bytes");
+
 int aegis_frame_ctx_init(t_aegis_frame_ctx *ctx);
 int aegis_frame_validate_bounds(t_aegis_frame_ctx *ctx);
 int aegis_frame_verify_hmac_consttime(t_aegis_frame_ctx *ctx,
                                       const uint8_t expected_tag[AEGIS_HMAC_TAG_LEN]);
+
+/* Rust no_std FFI entry points (libaegis_parser.a) */
+int32_t aegis_rust_process_frame(t_aegis_frame_ctx *ctx,
+                                 const uint8_t *key,
+                                 size_t key_len,
+                                 t_aegis_telemetry_data *out_telemetry);
+int32_t aegis_rust_compute_hmac(t_aegis_frame_ctx *ctx,
+                                const uint8_t *key,
+                                size_t key_len);
 
 #endif /* AEGIS_FRAME_ABI_H */

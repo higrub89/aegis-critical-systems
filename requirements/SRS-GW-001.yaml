@@ -46,3 +46,15 @@ requirements:
     isolation_action: >
       Reject unauthenticated frame, increment security violation counter, and
       trigger DTC-0x104 isolation procedure if 3 consecutive frames fail.
+
+  - id: SRS-GW-004
+    title: Zero-Heap Rust no_std Propulsion Telemetry Parser
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x104
+    description: >
+      The Rust no_std parser shall decode authenticated CAN-FD HV-BMS payloads
+      using #![forbid(unsafe_code)] and zero core::panicking symbols.
+    isolation_action: >
+      Reject malformed or unauthenticated frames prior to shared-memory dispatch
+      and assert SAFE_STATE transition via DTC-0x104.

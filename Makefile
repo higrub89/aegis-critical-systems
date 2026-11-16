@@ -14,9 +14,9 @@ TRACE_MD    := $(REPORTS_DIR)/DO-178C-Traceability-Matrix.md
 
 .PHONY: all build-c build-rust test audit trace clean fclean re
 
-all: build-c build-rust trace
+all: build-rust build-c trace
 
-build-c:
+build-c: build-rust
 	@cmake -B $(BUILD_DIR) -S . -DCMAKE_BUILD_TYPE=Release
 	@cmake --build $(BUILD_DIR) --parallel
 
@@ -39,8 +39,12 @@ audit: test
 	@cargo clippy --workspace --all-targets -- -D warnings
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_abi_contract
-	@echo "[AEGIS-AUDIT] Symbol & Undefined Reference Gate (libaegis_gateway_abi.a):"
+	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
+		./$(BUILD_DIR)/test_rust_ffi
+	@echo "[AEGIS-AUDIT] Undefined Reference Gate (libaegis_gateway_abi.a):"
 	@nm -u $(BUILD_DIR)/libaegis_gateway_abi.a
+	@echo "[AEGIS-AUDIT] Rust no_std Panic-Free Symbol Gate (aegis_parser object):"
+	@nm -u target/release/libaegis_parser.a | awk '/aegis_parser.*:/{p=1;print;next} /:$$/{p=0} p && /U /{print}'
 
 clean:
 	@rm -rf $(BUILD_DIR) $(REPORTS_DIR)

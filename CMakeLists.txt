@@ -74,3 +74,18 @@ target_link_libraries(test_abi_contract PRIVATE aegis_gateway_abi)
 target_compile_options(test_abi_contract PRIVATE ${AEGIS_C_FLAGS})
 
 add_test(NAME abi_contract_verification COMMAND test_abi_contract)
+
+# Rust no_std Static Archive FFI Integration Test
+set(AEGIS_RUST_PARSER_LIB "${CMAKE_CURRENT_SOURCE_DIR}/target/release/libaegis_parser.a")
+if(EXISTS "${AEGIS_RUST_PARSER_LIB}")
+    add_executable(test_rust_ffi
+        01-hybrid-can-gateway/src/test_rust_ffi.c
+    )
+    target_link_libraries(test_rust_ffi PRIVATE
+        aegis_gateway_abi
+        "${AEGIS_RUST_PARSER_LIB}"
+    )
+    target_compile_options(test_rust_ffi PRIVATE ${AEGIS_C_FLAGS} -ffunction-sections -fdata-sections)
+    target_link_options(test_rust_ffi PRIVATE -Wl,--gc-sections)
+    add_test(NAME rust_nostd_ffi_verification COMMAND test_rust_ffi)
+endif()
