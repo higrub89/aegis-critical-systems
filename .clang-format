@@ -1,0 +1,32 @@
+---
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: Latest
+ColumnLimit: 100
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlignConsecutiveMacros: AcrossEmptyLinesAndComments
+AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
+AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
+AlignTrailingComments: true
+PointerAlignment: Right
+DerivePointerAlignment: false
+SpaceAfterCStyleCast: false
+SpacesInAngles: false
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"aegis'
+    Priority: 1
+  - Regex: '^<linux/'
+    Priority: 2
+  - Regex: '^<sys/'
+    Priority: 3
+  - Regex: '^<.*>'
+    Priority: 4
+...

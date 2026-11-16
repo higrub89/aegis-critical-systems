@@ -147,11 +147,69 @@ int test_q15_anomaly_inference() noexcept
     return 0;
 }
 
+int test_spsc_ring_overrun_saturation() noexcept
+{
+    using SmallRing = aegis::hums::SpscRingBuffer<t_aegis_telemetry_data, 4U>;
+    SmallRing ring;
+
+    if (!ring.is_empty())
+    {
+        return 1;
+    }
+    if (ring.dropped_count() != 0U)
+    {
+        return 2;
+    }
+
+    const t_aegis_telemetry_data item1 {400000U, 1000, 250, 2U, 0U};
+    const t_aegis_telemetry_data item2 {400010U, 1010, 251, 2U, 0U};
+    const t_aegis_telemetry_data item3 {400020U, 1020, 252, 2U, 0U};
+    const t_aegis_telemetry_data item4 {400030U, 1030, 253, 2U, 0U};
+
+    if (!ring.try_push(item1))
+        return 3;
+    if (!ring.try_push(item2))
+        return 4;
+    if (!ring.try_push(item3))
+        return 5;
+
+    /* Buffer capacity=4 has 3 usable slots. Push item4 must fail & increment dropped_count */
+    if (ring.try_push(item4))
+        return 6;
+    if (ring.dropped_count() != 1U)
+        return 7;
+
+    t_aegis_telemetry_data out {};
+    if (!ring.try_pop(out) || out.pack_voltage_mv != 400000U)
+        return 8;
+    if (!ring.try_pop(out) || out.pack_voltage_mv != 400010U)
+        return 9;
+    if (!ring.try_pop(out) || out.pack_voltage_mv != 400020U)
+        return 10;
+    if (ring.try_pop(out))
+        return 11;
+    if (!ring.is_empty())
+        return 12;
+
+    if (!ring.try_push(item4))
+        return 13;
+    if (!ring.try_pop(out) || out.pack_voltage_mv != 400030U)
+        return 14;
+
+    return 0;
+}
+
 } // namespace
 
 int main()
 {
-    int rc = test_multithreaded_spsc_fifo();
+    int rc = test_spsc_ring_overrun_saturation();
+    if (rc != 0)
+    {
+        std::fprintf(stderr, "[FAIL] test_spsc_ring_overrun_saturation: %d\n", rc);
+        return 1;
+    }
+    rc = test_multithreaded_spsc_fifo();
     if (rc != 0)
     {
         std::fprintf(stderr, "[FAIL] test_multithreaded_spsc_fifo: %d\n", rc);

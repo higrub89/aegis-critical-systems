@@ -138,6 +138,22 @@ int aegis_can_open_fd(const char *iface_name, int nonblocking)
     return (fd);
 }
 
+int aegis_can_set_filter(int fd, uint32_t can_id, uint32_t can_mask)
+{
+    struct can_filter rfilter[1];
+
+    if (fd < 0)
+        return (-EINVAL);
+    rfilter[0].can_id = can_id;
+    rfilter[0].can_mask = can_mask;
+    if (setsockopt(fd, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter)) < 0)
+    {
+        int err = errno;
+        return (-err);
+    }
+    return (0);
+}
+
 int aegis_gw_init(t_aegis_gw_state *state, const t_aegis_gw_config *cfg)
 {
     int rc;

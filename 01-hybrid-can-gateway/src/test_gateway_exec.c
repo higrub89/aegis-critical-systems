@@ -177,10 +177,24 @@ static int test_antireplay_protection(void)
     return (0);
 }
 
+static int test_can_filter_contract(void)
+{
+    /* Negative check: invalid socket descriptor must return -EINVAL */
+    if (aegis_can_set_filter(-1, 0x120U, 0x7FFU) != -EINVAL)
+        return (1);
+    return (0);
+}
+
 int main(void)
 {
     int rc;
 
+    rc = test_can_filter_contract();
+    if (rc != 0)
+    {
+        (void)fprintf(stderr, "[FAIL] test_can_filter_contract: %d\n", rc);
+        return (1);
+    }
     rc = test_socket_loop_and_safe_state();
     if (rc != 0)
     {

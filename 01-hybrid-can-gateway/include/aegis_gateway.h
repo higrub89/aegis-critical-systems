@@ -62,6 +62,7 @@ AEGIS_STATIC_ASSERT((sizeof(t_aegis_gw_state) % AEGIS_CACHELINE_SIZE) == 0U
 uint64_t aegis_monotonic_ns(void);
 int      aegis_rt_lock_and_pin(int32_t cpu_core, int32_t rt_prio, int32_t *out_rt_active);
 int      aegis_can_open_fd(const char *iface_name, int nonblocking);
+int      aegis_can_set_filter(int fd, uint32_t can_id, uint32_t can_mask);
 int      aegis_gw_init(t_aegis_gw_state *state, const t_aegis_gw_config *cfg);
 int      aegis_gw_check_antireplay(t_aegis_gw_state *state, uint32_t rx_seq);
 int      aegis_gw_step_frame(t_aegis_gw_state         *state,
