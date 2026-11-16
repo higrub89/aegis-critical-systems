@@ -141,3 +141,32 @@ if(EXISTS "${AEGIS_RUST_PARSER_LIB}")
     target_link_options(test_hil_fsm PRIVATE -Wl,--gc-sections)
     add_test(NAME hil_fsm_closed_loop_verification COMMAND test_hil_fsm)
 endif()
+
+# ------------------------------------------------------------------------------
+# Subsystem 03: Lock-Free HUMS & Edge Anomaly Engine (C++23)
+# ------------------------------------------------------------------------------
+find_package(Threads REQUIRED)
+
+add_library(aegis_hums_core STATIC
+    03-lockfree-hums/src/q15_ekf.cpp
+)
+target_include_directories(aegis_hums_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/03-lockfree-hums/include
+)
+target_link_libraries(aegis_hums_core PUBLIC aegis_gateway_abi)
+target_compile_options(aegis_hums_core PRIVATE ${AEGIS_CXX_FLAGS} -ffunction-sections -fdata-sections)
+
+add_executable(aegis_hums_bench
+    03-lockfree-hums/src/main_hums_bench.cpp
+)
+target_link_libraries(aegis_hums_bench PRIVATE aegis_hums_core)
+target_compile_options(aegis_hums_bench PRIVATE ${AEGIS_CXX_FLAGS})
+target_link_options(aegis_hums_bench PRIVATE -Wl,--gc-sections)
+
+add_executable(test_lockfree_hums
+    03-lockfree-hums/src/test_lockfree_hums.cpp
+)
+target_link_libraries(test_lockfree_hums PRIVATE aegis_hums_core Threads::Threads)
+target_compile_options(test_lockfree_hums PRIVATE ${AEGIS_CXX_FLAGS})
+target_link_options(test_lockfree_hums PRIVATE -Wl,--gc-sections)
+add_test(NAME hums_lockfree_verification COMMAND test_lockfree_hums)

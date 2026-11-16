@@ -1,0 +1,36 @@
+# ==============================================================================
+# AEGIS Critical Systems - Low-Level Software Requirements Specification (SRS)
+# Document ID: SRS-HUMS-001
+# Standard: DO-178C DAL-B | POSIX.1b | MISRA C++:2023 | S1000D Issue 5.0 BREX
+# ==============================================================================
+document_id: SRS-HUMS-001
+subsystem: 03-lockfree-hums
+dal_level: DAL-B
+s1000d_dmc: DMC-AEGIS-A-24-30-03-00A-420A-A
+
+requirements:
+  - id: SRS-HUMS-001
+    title: Wait-Free Cache-Aligned SPSC Ring Buffer over POSIX SHM
+    dal: DAL-B
+    hazard: MIL-882E-CAT-II
+    fault: DTC-0x301
+    description: >
+      Telemetry ingestion from the safety gateway to HUMS shall use a wait-free
+      SPSC ring buffer with alignas(64) head/tail cache-line isolation and
+      explicit std::memory_order_acquire / std::memory_order_release barriers.
+    isolation_action: >
+      Drop telemetry frame non-blockingly when ring is full, increment overrun
+      counter, and raise DTC-0x301 without blocking the safety executive.
+
+  - id: SRS-HUMS-002
+    title: Zero-Heap Q15 Fixed-Point Kalman Anomaly Inference
+    dal: DAL-B
+    hazard: MIL-882E-CAT-II
+    fault: DTC-0x302
+    description: >
+      The HUMS edge anomaly engine shall execute 1D Q15 (int16_t) fixed-point
+      Kalman filtering strictly in pre-allocated static memory with bounded O(1)
+      execution latency measured via CLOCK_MONOTONIC_RAW.
+    isolation_action: >
+      Flag anomaly alert (DTC-0x302) to Ground Control Station when absolute Q15
+      innovation residual exceeds calibrated thermal or voltage thresholds.
