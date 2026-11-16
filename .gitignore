@@ -1,0 +1,28 @@
+# Build and compilation artifacts
+/build/
+/target/
+*.o
+*.d
+*.a
+*.so
+*.elf
+*.bin
+*.class
+compile_commands.json
+
+# Generated reports & S1000D outputs
+/reports/
+*.gcov
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+# Environment, IDE, OS
+.env
+.env.*
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
