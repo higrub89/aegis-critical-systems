@@ -141,6 +141,42 @@ static int test_socket_loop_and_safe_state(void)
     return (0);
 }
 
+static int test_antireplay_protection(void)
+{
+    _Alignas(AEGIS_CACHELINE_SIZE) static t_aegis_gw_state state;
+    const uint8_t      key[] = "AEGIS_HV_BMS_SHARED_SECRET_2026";
+    t_aegis_gw_config  cfg;
+    struct canfd_frame frame;
+
+    (void)memset(&cfg, 0, sizeof(cfg));
+    cfg.period_ns = 100000ULL;
+    cfg.hmac_key_len = sizeof(key) - 1U;
+    (void)memcpy(cfg.hmac_key, key, cfg.hmac_key_len);
+
+    if (aegis_gw_init(&state, &cfg) != 0)
+        return (1);
+
+    if (build_wire_frame(&frame, key, cfg.hmac_key_len, 10U, 401000U) != 0)
+        return (2);
+    if (aegis_gw_step_frame(&state, &frame, 1000ULL) != 0)
+        return (3);
+
+    if (build_wire_frame(&frame, key, cfg.hmac_key_len, 11U, 402000U) != 0)
+        return (4);
+    if (aegis_gw_step_frame(&state, &frame, 2000ULL) != 0)
+        return (5);
+
+    /* Replay seq=11 three times -> must reject with EALREADY + DTC-0x106 and latch SAFE_STATE */
+    for (uint64_t i = 0ULL; i < 3ULL; ++i)
+    {
+        if (aegis_gw_step_frame(&state, &frame, 3000ULL + i) != EALREADY)
+            return (6);
+    }
+    if (state.mode != AEGIS_GW_SAFE_STATE || state.last_dtc != AEGIS_DTC_REPLAY_ATTACK)
+        return (7);
+    return (0);
+}
+
 int main(void)
 {
     int rc;
@@ -151,6 +187,12 @@ int main(void)
         (void)fprintf(stderr, "[FAIL] test_socket_loop_and_safe_state: %d\n", rc);
         return (1);
     }
-    (void)printf("[PASS] C17 Cyclic Executive, 48B CAN-FD Wire Unpack & Safe-State Latch verified.\n");
+    rc = test_antireplay_protection();
+    if (rc != 0)
+    {
+        (void)fprintf(stderr, "[FAIL] test_antireplay_protection: %d\n", rc);
+        return (1);
+    }
+    (void)printf("[PASS] C17 Cyclic Executive, Anti-Replay (DO-326A) & Safe-State Latch verified.\n");
     return (0);
 }

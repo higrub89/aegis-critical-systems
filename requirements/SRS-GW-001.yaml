@@ -84,3 +84,16 @@ requirements:
     isolation_action: >
       Latch AEGIS_GW_SAFE_STATE, halt forwarding to telemetry shared memory,
       and raise DTC-0x104 fault alarm.
+
+  - id: SRS-GW-007
+    title: RTCA DO-326A Monotonic Sequence Anti-Replay Gate
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x106
+    description: >
+      Following constant-time HMAC verification, the gateway shall reject any
+      authenticated frame whose sequence counter does not strictly exceed the
+      last accepted sequence counter, latching SAFE_STATE after 3 replays.
+    isolation_action: >
+      Drop replayed CAN-FD frame with EALREADY, record DTC-0x106, and latch
+      AEGIS_GW_SAFE_STATE on repeated replay attacks.

@@ -226,15 +226,15 @@ static void remove_client_slot(int epoll_fd, int client_fd, int *client_fds, siz
  * @fault DTC-0x402
  * @hazard MIL-882E-CAT-III
  */
-int aegis_tmtc_epoll_poll_once(int                     epoll_fd,
-                               int                     listen_fd,
-                               int                    *client_fds,
-                               size_t                  max_clients,
-                               const t_aegis_tmtc_shm *shm,
-                               uint32_t               *seq_counter,
-                               uint32_t               *out_tc_received,
-                               uint8_t                *out_last_tc_type,
-                               int                     timeout_ms)
+int aegis_tmtc_epoll_poll_once(int               epoll_fd,
+                               int               listen_fd,
+                               int              *client_fds,
+                               size_t            max_clients,
+                               t_aegis_tmtc_shm *shm,
+                               uint32_t         *seq_counter,
+                               uint32_t         *out_tc_received,
+                               uint8_t          *out_last_tc_type,
+                               int               timeout_ms)
 {
     struct epoll_event events[AEGIS_TMTC_MAX_CLIENTS];
     uint8_t            pkt_buf[AEGIS_TMTC_PKT_SIZE];
@@ -284,6 +284,8 @@ int aegis_tmtc_epoll_poll_once(int                     epoll_fd,
                         *out_tc_received += 1U;
                     if (out_last_tc_type != NULL)
                         *out_last_tc_type = tc_pkt.msg_type;
+                    if (tc_pkt.msg_type == (uint8_t)AEGIS_MSG_TC_SAFE_STATE)
+                        __atomic_store_n(&shm->tc_safe_state_req, 1U, __ATOMIC_RELEASE);
                 }
             }
         }

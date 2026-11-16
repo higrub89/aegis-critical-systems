@@ -161,6 +161,29 @@ int aegis_gw_init(t_aegis_gw_state *state, const t_aegis_gw_config *cfg)
 }
 
 /*
+ * @req SRS-GW-007
+ * @fault DTC-0x106
+ * @hazard MIL-882E-CAT-I
+ */
+int aegis_gw_check_antireplay(t_aegis_gw_state *state, uint32_t rx_seq)
+{
+    if (state == NULL)
+        return (EINVAL);
+    if (state->has_rx_seq != 0U && rx_seq <= state->last_valid_seq)
+    {
+        state->frames_rejected += 1ULL;
+        state->last_dtc = AEGIS_DTC_REPLAY_ATTACK;
+        state->consec_auth_failures += 1U;
+        if (state->consec_auth_failures >= AEGIS_MAX_CONSEC_AUTH_FAIL)
+            state->mode = AEGIS_GW_SAFE_STATE;
+        return (EALREADY);
+    }
+    state->last_valid_seq = rx_seq;
+    state->has_rx_seq = 1U;
+    return (0);
+}
+
+/*
  * @req SRS-GW-006
  * @fault DTC-0x104
  * @hazard MIL-882E-CAT-I
@@ -199,6 +222,9 @@ int aegis_gw_step_frame(t_aegis_gw_state         *state,
 
     if (ffi_rc == 0)
     {
+        int replay_rc = aegis_gw_check_antireplay(state, state->frame_ctx.seq_counter);
+        if (replay_rc != 0)
+            return (replay_rc);
         state->last_telemetry = decoded;
         state->frames_ok += 1ULL;
         state->consec_auth_failures = 0U;

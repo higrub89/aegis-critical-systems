@@ -64,6 +64,7 @@ test: all
 	@ctest --test-dir $(BUILD_DIR) --output-on-failure
 	@cargo test --workspace
 	@java -cp $(BUILD_DIR)/java com.aegis.gcs.TacticalGcsTest
+	@./scripts/test_e2e_pipeline.sh
 
 audit: test
 	@cargo clippy --workspace --all-targets -- -D warnings

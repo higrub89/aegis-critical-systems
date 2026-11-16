@@ -2,15 +2,20 @@
  * AEGIS Critical Systems - Subsystem 01: Hybrid Safety Gateway
  * File: 01-hybrid-can-gateway/src/main_gateway.c
  * Description: Standalone PREEMPT_RT Cyclic Executive Node over SocketCAN
+ *              and POSIX Shared Memory Telemetry Bus.
  * Standard: ISO/IEC 9899:2018 (C17) | POSIX.1-2008
  * ========================================================================== */
 
 #define _POSIX_C_SOURCE 200809L
 #include "aegis_gateway.h"
+#include "aegis_shm_bus.h"
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static volatile sig_atomic_t g_stop_requested = 0;
@@ -35,6 +40,29 @@ static int parse_u32_arg(const char *arg, uint32_t *out)
     return (0);
 }
 
+static t_aegis_tmtc_shm *open_shm_bus(const char *shm_name)
+{
+    int               fd;
+    t_aegis_tmtc_shm *ptr;
+
+    if (shm_name == NULL || shm_name[0] != '/')
+        return (NULL);
+    fd = shm_open(shm_name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    if (fd < 0)
+        return (NULL);
+    if (ftruncate(fd, (off_t)sizeof(t_aegis_tmtc_shm)) != 0)
+    {
+        (void)close(fd);
+        return (NULL);
+    }
+    ptr = (t_aegis_tmtc_shm *)mmap(
+        NULL, sizeof(t_aegis_tmtc_shm), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    (void)close(fd);
+    if (ptr == MAP_FAILED)
+        return (NULL);
+    return (ptr);
+}
+
 int main(int argc, char **argv)
 {
     _Alignas(AEGIS_CACHELINE_SIZE) static t_aegis_gw_state g_state;
@@ -42,6 +70,8 @@ int main(int argc, char **argv)
     t_aegis_gw_config cfg;
     struct sigaction  sa;
     const char       *iface;
+    const char       *shm_name;
+    t_aegis_tmtc_shm *shm_bus;
     uint32_t          max_cycles;
     int32_t           rt_active;
     int               can_fd;
@@ -49,6 +79,7 @@ int main(int argc, char **argv)
     int               i;
 
     iface = "vcan0";
+    shm_name = AEGIS_DEFAULT_SHM_NAME;
     max_cycles = 0U;
     (void)memset(&cfg, 0, sizeof(cfg));
     cfg.period_ns = AEGIS_DEFAULT_PERIOD_NS;
@@ -62,6 +93,10 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "--iface") == 0 && (i + 1) < argc)
         {
             iface = argv[++i];
+        }
+        else if (strcmp(argv[i], "--shm") == 0 && (i + 1) < argc)
+        {
+            shm_name = argv[++i];
         }
         else if (strcmp(argv[i], "--cycles") == 0 && (i + 1) < argc)
         {
@@ -105,20 +140,43 @@ int main(int argc, char **argv)
         return (1);
     }
 
-    (void)printf("[AEGIS-GW] Cyclic Executive STARTED on '%s' (1 kHz, rt_locked=%d)\n",
+    shm_bus = open_shm_bus(shm_name);
+    (void)printf("[AEGIS-GW] Cyclic Executive STARTED on '%s' (1 kHz, rt_locked=%d, shm=%s)\n",
                  iface,
-                 g_state.rt_locked);
+                 g_state.rt_locked,
+                 shm_bus != NULL ? shm_name : "disabled");
 
     stop_local = 0;
     while (g_stop_requested == 0 && g_state.mode != AEGIS_GW_SAFE_STATE)
     {
-        (void)aegis_gw_run_loop(&g_state, can_fd, max_cycles == 0U ? 100U : max_cycles, &stop_local);
+        uint32_t step_cycles = (max_cycles == 0U || max_cycles > 10U) ? 10U : max_cycles;
+        (void)aegis_gw_run_loop(&g_state, can_fd, step_cycles, &stop_local);
+
+        if (shm_bus != NULL)
+        {
+            if (__atomic_load_n(&shm_bus->tc_safe_state_req, __ATOMIC_ACQUIRE) != 0U)
+            {
+                g_state.mode = AEGIS_GW_SAFE_STATE;
+                g_state.last_dtc = AEGIS_DTC_AUTH_FAILURE;
+            }
+            shm_bus->telemetry = g_state.last_telemetry;
+            shm_bus->gw_mode = (uint16_t)g_state.mode;
+            shm_bus->last_dtc = g_state.last_dtc;
+            shm_bus->timestamp_ns = aegis_monotonic_ns();
+            __atomic_fetch_add(&shm_bus->seq_lock, 1U, __ATOMIC_RELEASE);
+        }
+
         if (max_cycles != 0U)
-            break;
+        {
+            if (g_state.cycles_executed >= max_cycles)
+                break;
+        }
         if (g_stop_requested != 0)
             stop_local = 1;
     }
 
+    if (shm_bus != NULL)
+        (void)munmap(shm_bus, sizeof(t_aegis_tmtc_shm));
     (void)close(can_fd);
     (void)printf("[AEGIS-GW] Shutdown: mode=%d cycles=%llu ok=%llu rejected=%llu max_lat_ns=%llu\n",
                  (int)g_state.mode,

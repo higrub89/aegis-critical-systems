@@ -48,9 +48,11 @@ typedef struct s_aegis_gw_state
     uint64_t                                              frames_rejected;
     uint64_t                                              max_step_latency_ns;
     uint32_t                                              consec_auth_failures;
+    uint32_t                                              last_valid_seq;
     t_aegis_gw_mode                                       mode;
     int32_t                                               rt_locked;
     uint16_t                                              last_dtc;
+    uint8_t                                               has_rx_seq;
 } t_aegis_gw_state;
 
 AEGIS_STATIC_ASSERT((sizeof(t_aegis_gw_state) % AEGIS_CACHELINE_SIZE) == 0U
@@ -61,6 +63,7 @@ uint64_t aegis_monotonic_ns(void);
 int      aegis_rt_lock_and_pin(int32_t cpu_core, int32_t rt_prio, int32_t *out_rt_active);
 int      aegis_can_open_fd(const char *iface_name, int nonblocking);
 int      aegis_gw_init(t_aegis_gw_state *state, const t_aegis_gw_config *cfg);
+int      aegis_gw_check_antireplay(t_aegis_gw_state *state, uint32_t rx_seq);
 int      aegis_gw_step_frame(t_aegis_gw_state         *state,
                              const struct canfd_frame *rx_frame,
                              uint64_t                  now_ns);

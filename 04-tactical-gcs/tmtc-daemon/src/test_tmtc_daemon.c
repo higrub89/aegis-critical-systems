@@ -179,6 +179,8 @@ static int test_epoll_shm_tcp_loopback(void)
         != 0)
         return (12);
 
+    uint32_t tc_req = __atomic_load_n(&shm_ptr->tc_safe_state_req, __ATOMIC_ACQUIRE);
+
     (void)close(client_sock);
     for (i = 0U; i < AEGIS_TMTC_MAX_CLIENTS; ++i)
     {
@@ -190,7 +192,7 @@ static int test_epoll_shm_tcp_loopback(void)
     (void)munmap(shm_ptr, sizeof(t_aegis_tmtc_shm));
     (void)shm_unlink(shm_name);
 
-    if (tc_count != 1U || last_tc != (uint8_t)AEGIS_MSG_TC_SAFE_STATE)
+    if (tc_count != 1U || last_tc != (uint8_t)AEGIS_MSG_TC_SAFE_STATE || tc_req != 1U)
         return (13);
     return (0);
 }
