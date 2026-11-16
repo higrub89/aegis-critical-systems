@@ -3,7 +3,83 @@
 use crate::scanner::TraceRecord;
 use crate::srs::SrsDocument;
 use crate::TraceError;
+use std::collections::HashSet;
 use std::fmt::Write as _;
+
+/// Validates that no source trace tag references an unknown `@req` outside `known_srs_docs`.
+///
+/// # Errors
+/// Returns [`TraceError::VerificationFailed`] if any orphan `@req` annotation is detected.
+pub fn check_orphan_requirements(
+    srs_docs: &[SrsDocument],
+    records: &[TraceRecord],
+) -> Result<(), TraceError> {
+    let mut known_ids = HashSet::new();
+    for doc in srs_docs {
+        for req in &doc.requirements {
+            known_ids.insert(req.id.as_str());
+        }
+    }
+    for trace in records {
+        if !known_ids.contains(trace.req_id.as_str()) {
+            return Err(TraceError::VerificationFailed(format!(
+                "orphan @req '{}' at {}:{} ({}) not found in any SRS document",
+                trace.req_id, trace.file_path, trace.line_number, trace.symbol_name
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Renders deterministic sorted lockfile entries (`req_id|file_path|symbol_name|body_sha256`).
+#[must_use]
+pub fn render_trace_lock(records: &[TraceRecord]) -> String {
+    let mut entries: Vec<String> = records
+        .iter()
+        .map(|r| format!("{}|{}|{}|{}", r.req_id, r.file_path, r.symbol_name, r.body_sha256))
+        .collect();
+    entries.sort();
+    entries.dedup();
+    let mut out = String::new();
+    for line in entries {
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out
+}
+
+/// Verifies current scanned trace records strictly match `lock_content`.
+///
+/// # Errors
+/// Returns [`TraceError::VerificationFailed`] on any SHA-256 drift or added/removed trace link.
+pub fn verify_trace_lock(lock_content: &str, records: &[TraceRecord]) -> Result<(), TraceError> {
+    let expected: Vec<&str> = lock_content
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    let actual_str = render_trace_lock(records);
+    let actual: Vec<&str> = actual_str
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+
+    if expected == actual {
+        return Ok(());
+    }
+
+    for entry in &actual {
+        if !expected.contains(entry) {
+            return Err(TraceError::VerificationFailed(format!(
+                "trace.lock drift detected for entry '{entry}' (re-audit and update requirements/trace.lock)"
+            )));
+        }
+    }
+    Err(TraceError::VerificationFailed(
+        "trace.lock mismatch: traced requirement removed or modified".to_string(),
+    ))
+}
 
 /// Verification status of a single SRS requirement against scanned source code.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,14 +260,44 @@ pub fn generate_s1000d_fault_xml(
     xml
 }
 
-fn write_ident_and_status_section(xml: &mut String, srs: &SrsDocument) {
-    let _ = writeln!(xml, "  <identAndStatusSection>");
-    let _ = writeln!(xml, "    <dmAddress>");
-    let _ = writeln!(xml, "      <dmIdent>");
+fn write_dm_code(xml: &mut String, dmc: &str) {
+    let clean = dmc.strip_prefix("DMC-").unwrap_or(dmc);
+    let parts: Vec<&str> = clean.split('-').collect();
+    if parts.len() == 8 {
+        let sub_sys = parts[3].chars().next().unwrap_or('0');
+        let sub_sub = parts[3].chars().nth(1).unwrap_or('0');
+        let disassy_code = parts[5].get(..2).unwrap_or("00");
+        let disassy_var = parts[5].get(2..).unwrap_or("A");
+        let info_code = parts[6].get(..3).unwrap_or("420");
+        let info_var = parts[6].get(3..).unwrap_or("A");
+        let _ = writeln!(
+            xml,
+            "        <dmCode modelIdentCode=\"{}\" systemDiffCode=\"{}\" systemCode=\"{}\" subSystemCode=\"{}\" subSubSystemCode=\"{}\" assyCode=\"{}\" disassyCode=\"{}\" disassyCodeVariant=\"{}\" infoCode=\"{}\" infoCodeVariant=\"{}\" itemLocationCode=\"{}\"/>",
+            escape_xml(parts[0]),
+            escape_xml(parts[1]),
+            escape_xml(parts[2]),
+            sub_sys,
+            sub_sub,
+            escape_xml(parts[4]),
+            escape_xml(disassy_code),
+            escape_xml(disassy_var),
+            escape_xml(info_code),
+            escape_xml(info_var),
+            escape_xml(parts[7])
+        );
+        return;
+    }
     let _ = writeln!(
         xml,
         "        <dmCode modelIdentCode=\"AEGIS\" systemDiffCode=\"A\" systemCode=\"24\" subSystemCode=\"3\" subSubSystemCode=\"0\" assyCode=\"01\" disassyCode=\"00\" disassyCodeVariant=\"A\" infoCode=\"420\" infoCodeVariant=\"A\" itemLocationCode=\"A\"/>"
     );
+}
+
+fn write_ident_and_status_section(xml: &mut String, srs: &SrsDocument) {
+    let _ = writeln!(xml, "  <identAndStatusSection>");
+    let _ = writeln!(xml, "    <dmAddress>");
+    let _ = writeln!(xml, "      <dmIdent>");
+    write_dm_code(xml, &srs.s1000d_dmc);
     let _ = writeln!(
         xml,
         "        <language languageIsoCode=\"en\" countryIsoCode=\"US\"/>"

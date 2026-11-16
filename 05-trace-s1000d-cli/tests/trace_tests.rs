@@ -1,6 +1,9 @@
 //! Integration and unit verification suite for `aegis-trace`.
 
-use aegis_trace::s1000d::{generate_s1000d_fault_xml, verify_traceability};
+use aegis_trace::s1000d::{
+    check_orphan_requirements, generate_s1000d_fault_xml, render_trace_lock, verify_trace_lock,
+    verify_traceability,
+};
 use aegis_trace::scanner::scan_source_str;
 use aegis_trace::sha256::sha256_hex;
 use aegis_trace::srs::SrsDocument;
@@ -109,4 +112,68 @@ int init_abi(void) { return 0; }
     let xml = generate_s1000d_fault_xml(&srs, &coverage);
     assert!(xml.contains("<faultIsolationProcedure id=\"FIP-SRS-GW-001\" faultCode=\"DTC-0x101\">"));
     assert!(xml.contains("Verified Symbol: init_abi"));
+}
+
+#[test]
+fn dynamic_dmc_orphan_detection_and_lockfile_drift_gate() {
+    let yaml = r"
+document_id: SRS-HIL-TEST
+subsystem: 02-hil-hvbms-sim
+dal_level: DAL-A
+s1000d_dmc: DMC-AEGIS-A-24-30-02-00A-420A-A
+
+requirements:
+  - id: SRS-HIL-001
+    title: 2D FSM
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x201
+    description: >
+      O(1) FSM
+    isolation_action: >
+      Open HV contactor
+";
+    let srs_res = SrsDocument::parse_yaml(yaml);
+    assert!(srs_res.is_ok());
+    let Ok(srs) = srs_res else {
+        return;
+    };
+
+    let code = r"
+// @req SRS-HIL-001
+// @fault DTC-0x201
+// @hazard MIL-882E-CAT-I
+int step_fsm(void) { return 0; }
+";
+    let records = scan_source_str(code, "fsm.c");
+    assert!(check_orphan_requirements(std::slice::from_ref(&srs), &records).is_ok());
+
+    let cov_res = verify_traceability(&srs, &records);
+    assert!(cov_res.is_ok());
+    let Ok(cov) = cov_res else {
+        return;
+    };
+    let xml = generate_s1000d_fault_xml(&srs, &cov);
+    assert!(xml.contains("assyCode=\"02\""));
+
+    let lock = render_trace_lock(&records);
+    assert!(verify_trace_lock(&lock, &records).is_ok());
+
+    let drifted_code = r"
+// @req SRS-HIL-001
+// @fault DTC-0x201
+// @hazard MIL-882E-CAT-I
+int step_fsm(void) { return 1; }
+";
+    let drifted_records = scan_source_str(drifted_code, "fsm.c");
+    assert!(verify_trace_lock(&lock, &drifted_records).is_err());
+
+    let orphan_code = r"
+// @req SRS-UNKNOWN-999
+// @fault DTC-0x999
+// @hazard MIL-882E-CAT-I
+int unknown_fn(void) { return 0; }
+";
+    let orphan_records = scan_source_str(orphan_code, "orphan.c");
+    assert!(check_orphan_requirements(&[srs], &orphan_records).is_err());
 }

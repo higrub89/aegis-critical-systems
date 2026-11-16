@@ -59,6 +59,11 @@ trace: build-rust
 		--root . \
 		--out-xml $(S1000D_GCS) \
 		--out-matrix $(TRACE_GCS_MD)
+	@./target/release/aegis-trace scan \
+		--srs-dir requirements \
+		--root . \
+		--check-orphans \
+		--verify-lock requirements/trace.lock
 
 test: all
 	@ctest --test-dir $(BUILD_DIR) --output-on-failure
