@@ -11,6 +11,11 @@
 #include <thread>
 #include <unistd.h>
 
+extern "C" {
+void aegis_hums_arm_alloc_trap(void);
+void aegis_hums_disarm_alloc_trap(void);
+}
+
 namespace
 {
 
@@ -118,6 +123,7 @@ int test_q15_anomaly_inference() noexcept
     };
     aegis::hums::Q15AnomalyFilter filter(cfg);
 
+    aegis_hums_arm_alloc_trap();
     /* Steady nominal samples -> zero anomalies */
     for (int i = 0; i < 10; ++i)
     {
@@ -125,6 +131,7 @@ int test_q15_anomaly_inference() noexcept
         const auto out = filter.step(nom);
         if (out.anomaly_detected != 0U)
         {
+            aegis_hums_disarm_alloc_trap();
             return 1;
         }
     }
@@ -132,6 +139,7 @@ int test_q15_anomaly_inference() noexcept
     /* Sudden thermal runaway spike (25.5 C -> 55.0 C) -> triggers DTC-0x302 */
     const t_aegis_telemetry_data spike {400000U, 30000, 550, 2U, 0x01U};
     const auto out = filter.step(spike);
+    aegis_hums_disarm_alloc_trap();
     if (out.anomaly_detected != 1U || out.dtc_code != aegis::hums::kDtcHumsAnomaly)
     {
         return 2;

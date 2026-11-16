@@ -21,7 +21,7 @@ SRS_GCS_SPEC  := requirements/SRS-GCS-001.yaml
 S1000D_GCS    := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-04-00A-420A-A.xml
 TRACE_GCS_MD  := $(REPORTS_DIR)/DO-178C-GCS-Traceability-Matrix.md
 
-.PHONY: all build-c build-rust build-java test audit trace clean fclean re
+.PHONY: all build-c build-rust build-java test audit trace xml-check sanitizers coverage clean fclean re
 
 all: build-rust build-c build-java trace
 
@@ -66,7 +66,7 @@ test: all
 	@java -cp $(BUILD_DIR)/java com.aegis.gcs.TacticalGcsTest
 	@./scripts/test_e2e_pipeline.sh
 
-audit: test
+audit: test xml-check
 	@cargo clippy --workspace --all-targets -- -D warnings
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_abi_contract
@@ -86,8 +86,37 @@ audit: test
 	@echo "[AEGIS-AUDIT] Rust no_std Panic-Free Symbol Gate (aegis_parser object):"
 	@nm -u target/release/libaegis_parser.a | awk '/aegis_parser.*:/{p=1;print;next} /:$$/{p=0} p && /U /{print}'
 
+xml-check: trace
+	@xmllint --noout $(REPORTS_DIR)/*.xml
+	@echo "[AEGIS-XML] All S1000D XML Data Modules well-formed."
+
+sanitizers: build-rust
+	@cmake -B build-asan -S . -DCMAKE_BUILD_TYPE=Debug \
+		-DAEGIS_ENABLE_MALLOC_TRAP=OFF \
+		-DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g" \
+		-DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
+	@cmake --build build-asan --parallel
+	@ctest --test-dir build-asan --output-on-failure
+	@cmake -B build-tsan -S . -DCMAKE_BUILD_TYPE=Debug \
+		-DAEGIS_ENABLE_MALLOC_TRAP=OFF \
+		-DCMAKE_C_FLAGS="-fsanitize=thread -g" \
+		-DCMAKE_CXX_FLAGS="-fsanitize=thread -g"
+	@cmake --build build-tsan --target test_lockfree_hums --parallel
+	@setarch "$$(uname -m)" -R ./build-tsan/test_lockfree_hums
+	@echo "[AEGIS-SAN] ASan + UBSan + TSan passed with zero violations."
+
+coverage: build-rust
+	@cmake -B build-cov -S . -DCMAKE_BUILD_TYPE=Debug \
+		-DAEGIS_ENABLE_MALLOC_TRAP=OFF \
+		-DCMAKE_C_FLAGS="--coverage -O0 -g" \
+		-DCMAKE_CXX_FLAGS="--coverage -O0 -g"
+	@cmake --build build-cov --parallel
+	@ctest --test-dir build-cov --output-on-failure
+	@gcov -n $$(find build-cov -path '*CMakeFiles/aegis*' -o -path '*CMakeFiles/test_*' | grep '\.gcno$$') 2>/dev/null \
+		| awk '/File .*aegis-critical-systems/{print; f=1; next} f && /Lines executed/{print; f=0}'
+
 clean:
-	@rm -rf $(BUILD_DIR) $(REPORTS_DIR)
+	@rm -rf $(BUILD_DIR) build-asan build-tsan build-cov $(REPORTS_DIR)
 	@cargo clean
 
 fclean: clean

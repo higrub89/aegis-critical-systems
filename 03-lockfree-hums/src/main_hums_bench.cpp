@@ -14,6 +14,11 @@
 #include <cstdio>
 #include <time.h>
 
+extern "C" {
+void aegis_hums_arm_alloc_trap(void);
+void aegis_hums_disarm_alloc_trap(void);
+}
+
 namespace
 {
 
@@ -50,6 +55,7 @@ int main()
     std::uint64_t sum_ns = 0ULL;
     std::uint64_t anomalies = 0ULL;
 
+    aegis_hums_arm_alloc_trap();
     for (std::size_t i = 0U; i < kSamples; ++i)
     {
         const t_aegis_telemetry_data sample {
@@ -74,6 +80,7 @@ int main()
     }
 
     std::sort(g_latencies_ns.begin(), g_latencies_ns.end());
+    aegis_hums_disarm_alloc_trap();
     const std::uint64_t p50 = g_latencies_ns[(kSamples * 50U) / 100U];
     const std::uint64_t p99 = g_latencies_ns[(kSamples * 99U) / 100U];
     const std::uint64_t pmax = g_latencies_ns[kSamples - 1U];
