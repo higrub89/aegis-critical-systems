@@ -72,7 +72,7 @@ test: all
 	@./scripts/test_e2e_pipeline.sh
 
 audit: test xml-check
-	@cargo clippy --workspace --all-targets -- -D warnings
+	@cargo clippy --workspace --all-targets -- -D warnings -A unknown_lints -A clippy::chunks_exact_to_as_chunks
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_abi_contract
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \

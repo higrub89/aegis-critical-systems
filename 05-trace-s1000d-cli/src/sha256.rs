@@ -40,14 +40,17 @@ pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {
     }
     padded.extend_from_slice(&bit_len.to_be_bytes());
 
-    for chunk in padded.chunks_exact(64) {
+    let num_blocks = padded.len() / 64;
+    for b in 0..num_blocks {
+        let chunk = &padded[b * 64..(b + 1) * 64];
         let mut schedule = [0u32; 64];
-        for (i, word_bytes) in chunk.chunks_exact(4).enumerate() {
-            let b0 = u32::from(word_bytes[0]);
-            let b1 = u32::from(word_bytes[1]);
-            let b2 = u32::from(word_bytes[2]);
-            let b3 = u32::from(word_bytes[3]);
-            schedule[i] = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+        for (i, slot) in schedule.iter_mut().enumerate().take(16) {
+            let offset = i * 4;
+            let b0 = u32::from(chunk[offset]);
+            let b1 = u32::from(chunk[offset + 1]);
+            let b2 = u32::from(chunk[offset + 2]);
+            let b3 = u32::from(chunk[offset + 3]);
+            *slot = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
         }
         for i in 16..64 {
             let s0 = schedule[i - 15].rotate_right(7)

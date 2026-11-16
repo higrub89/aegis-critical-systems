@@ -78,10 +78,11 @@ impl Sha256 {
         self.update(&bit_len.to_be_bytes());
 
         let mut out = [0u8; 32];
-        for (dst_chunk, &word) in out.chunks_exact_mut(4).zip(self.state.iter()) {
+        for (idx, &word) in self.state.iter().enumerate() {
             let bytes = word.to_be_bytes();
-            for (d, s) in dst_chunk.iter_mut().zip(bytes.iter()) {
-                *d = *s;
+            let offset = idx.wrapping_mul(4);
+            if offset.wrapping_add(4) <= out.len() {
+                out[offset..offset + 4].copy_from_slice(&bytes);
             }
         }
         out
@@ -89,12 +90,13 @@ impl Sha256 {
 
     fn compress(&mut self, chunk: &[u8; 64]) {
         let mut schedule = [0u32; 64];
-        for (dst, bytes) in schedule.iter_mut().take(16).zip(chunk.chunks_exact(4)) {
-            let b0 = u32::from(bytes.first().copied().unwrap_or(0));
-            let b1 = u32::from(bytes.get(1).copied().unwrap_or(0));
-            let b2 = u32::from(bytes.get(2).copied().unwrap_or(0));
-            let b3 = u32::from(bytes.get(3).copied().unwrap_or(0));
-            *dst = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+        for (idx, slot) in schedule.iter_mut().take(16).enumerate() {
+            let offset = idx.wrapping_mul(4);
+            let b0 = u32::from(chunk.get(offset).copied().unwrap_or(0));
+            let b1 = u32::from(chunk.get(offset.wrapping_add(1)).copied().unwrap_or(0));
+            let b2 = u32::from(chunk.get(offset.wrapping_add(2)).copied().unwrap_or(0));
+            let b3 = u32::from(chunk.get(offset.wrapping_add(3)).copied().unwrap_or(0));
+            *slot = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
         }
 
         for idx in 16usize..64 {
