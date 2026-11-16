@@ -1,0 +1,36 @@
+# ==============================================================================
+# AEGIS Critical Systems - Low-Level Software Requirements Specification (SRS)
+# Document ID: SRS-GCS-001
+# Standard: DO-178C DAL-C | POSIX.1-2017 | MISRA C:2012 | S1000D Issue 5.0 BREX
+# ==============================================================================
+document_id: SRS-GCS-001
+subsystem: 04-tactical-gcs
+dal_level: DAL-C
+s1000d_dmc: DMC-AEGIS-A-24-30-04-00A-420A-A
+
+requirements:
+  - id: SRS-GCS-001
+    title: Hardware-Accelerated Castagnoli CRC-32C TM/TC Binary Framing
+    dal: DAL-C
+    hazard: MIL-882E-CAT-III
+    fault: DTC-0x401
+    description: >
+      All Telemetry (TM) and Telecommand (TC) 32-byte binary frames exchanged
+      between the embedded C17 node and Tactical GCS shall be protected by a
+      Castagnoli CRC-32C checksum over bytes [0..27].
+    isolation_action: >
+      Discard corrupted TM/TC packets immediately with EBADMSG, increment frame
+      error telemetry, and log DTC-0x401 without mutating actuator state.
+
+  - id: SRS-GCS-002
+    title: Non-Blocking POSIX epoll TM/TC Bridge over Shared Memory
+    dal: DAL-C
+    hazard: MIL-882E-CAT-III
+    fault: DTC-0x402
+    description: >
+      The embedded TM/TC daemon shall multiplex non-blocking TCP sockets via
+      POSIX epoll and read telemetry snapshots from POSIX shared memory
+      (shm_open/mmap) without post-init heap allocation or FD leaks.
+    isolation_action: >
+      Close unresponsive client sockets deterministically on epoll error/hangup
+      and raise DTC-0x402 if shared memory mapping is unavailable.

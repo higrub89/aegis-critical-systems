@@ -170,3 +170,31 @@ target_link_libraries(test_lockfree_hums PRIVATE aegis_hums_core Threads::Thread
 target_compile_options(test_lockfree_hums PRIVATE ${AEGIS_CXX_FLAGS})
 target_link_options(test_lockfree_hums PRIVATE -Wl,--gc-sections)
 add_test(NAME hums_lockfree_verification COMMAND test_lockfree_hums)
+
+# ------------------------------------------------------------------------------
+# Subsystem 04: Tactical GCS - Embedded C17 TM/TC Daemon
+# ------------------------------------------------------------------------------
+add_library(aegis_tmtc_core STATIC
+    04-tactical-gcs/tmtc-daemon/src/aegis_crc32c.c
+    04-tactical-gcs/tmtc-daemon/src/aegis_tmtc_epoll.c
+)
+target_include_directories(aegis_tmtc_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/04-tactical-gcs/tmtc-daemon/include
+)
+target_link_libraries(aegis_tmtc_core PUBLIC aegis_gateway_abi)
+target_compile_options(aegis_tmtc_core PRIVATE ${AEGIS_C_FLAGS} -ffunction-sections -fdata-sections)
+
+add_executable(aegis_tmtc_daemon
+    04-tactical-gcs/tmtc-daemon/src/main_tmtc_daemon.c
+)
+target_link_libraries(aegis_tmtc_daemon PRIVATE aegis_tmtc_core)
+target_compile_options(aegis_tmtc_daemon PRIVATE ${AEGIS_C_FLAGS})
+target_link_options(aegis_tmtc_daemon PRIVATE -Wl,--gc-sections)
+
+add_executable(test_tmtc_daemon
+    04-tactical-gcs/tmtc-daemon/src/test_tmtc_daemon.c
+)
+target_link_libraries(test_tmtc_daemon PRIVATE aegis_tmtc_core)
+target_compile_options(test_tmtc_daemon PRIVATE ${AEGIS_C_FLAGS})
+target_link_options(test_tmtc_daemon PRIVATE -Wl,--gc-sections)
+add_test(NAME tmtc_epoll_crc32c_verification COMMAND test_tmtc_daemon)

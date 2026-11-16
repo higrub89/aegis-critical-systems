@@ -17,6 +17,9 @@ TRACE_HIL_MD  := $(REPORTS_DIR)/DO-178C-HIL-Traceability-Matrix.md
 SRS_HUMS_SPEC := requirements/SRS-HUMS-001.yaml
 S1000D_HUMS   := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-03-00A-420A-A.xml
 TRACE_HUMS_MD := $(REPORTS_DIR)/DO-178C-HUMS-Traceability-Matrix.md
+SRS_GCS_SPEC  := requirements/SRS-GCS-001.yaml
+S1000D_GCS    := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-04-00A-420A-A.xml
+TRACE_GCS_MD  := $(REPORTS_DIR)/DO-178C-GCS-Traceability-Matrix.md
 
 .PHONY: all build-c build-rust test audit trace clean fclean re
 
@@ -46,6 +49,11 @@ trace: build-rust
 		--root . \
 		--out-xml $(S1000D_HUMS) \
 		--out-matrix $(TRACE_HUMS_MD)
+	@./target/release/aegis-trace scan \
+		--srs $(SRS_GCS_SPEC) \
+		--root . \
+		--out-xml $(S1000D_GCS) \
+		--out-matrix $(TRACE_GCS_MD)
 
 test: all
 	@ctest --test-dir $(BUILD_DIR) --output-on-failure
@@ -63,6 +71,8 @@ audit: test
 		./$(BUILD_DIR)/test_hil_fsm
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_lockfree_hums
+	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
+		./$(BUILD_DIR)/test_tmtc_daemon
 	@./$(BUILD_DIR)/aegis_hums_bench
 	@echo "[AEGIS-AUDIT] Undefined Reference Gate (libaegis_gateway_abi.a):"
 	@nm -u $(BUILD_DIR)/libaegis_gateway_abi.a
