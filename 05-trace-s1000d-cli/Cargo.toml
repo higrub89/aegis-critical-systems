@@ -1,0 +1,18 @@
+[package]
+name = "aegis-trace"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "DO-178C to S1000D Issue 5.0 BREX Bidirectional Traceability Compiler"
+
+[lib]
+name = "aegis_trace"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aegis-trace"
+path = "src/main.rs"
+
+[lints]
+workspace = true

@@ -1,0 +1,48 @@
+# ==============================================================================
+# AEGIS Critical Systems - Low-Level Software Requirements Specification (SRS)
+# Document ID: SRS-GW-001
+# Standard: DO-178C DAL-A/B | MIL-STD-882E | S1000D Issue 5.0 BREX
+# ==============================================================================
+document_id: SRS-GW-001
+subsystem: 01-hybrid-can-gateway
+dal_level: DAL-A
+s1000d_dmc: DMC-AEGIS-A-24-30-01-00A-420A-A
+
+requirements:
+  - id: SRS-GW-001
+    title: 128-Byte Cache-Aligned FFI ABI Frame Context
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x101
+    description: >
+      The shared C17/Rust FFI context (t_aegis_frame_ctx) shall occupy exactly
+      128 bytes (two 64-byte L1d cache lines) with zero implicit padding to
+      prevent cache-line tearing and false sharing across the boundary.
+    isolation_action: >
+      Verify compile-time _Static_assert(sizeof(t_aegis_frame_ctx) == 128) and
+      halt gateway initialization if memory alignment deviates from 64-byte boundary.
+
+  - id: SRS-GW-002
+    title: Deterministic Frame Context Initialization and Payload Bounds Check
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x102
+    description: >
+      All CAN-FD frame contexts shall be deterministically zero-initialized in
+      static memory and validated for payload length bounds (<= 64 bytes) using
+      flat boolean predicates prior to FFI dispatch.
+    isolation_action: >
+      Transition gateway supervisor immediately to SAFE_STATE (open HV contactor)
+      and log DTC-0x102 in shared audit memory.
+
+  - id: SRS-GW-003
+    title: Constant-Time Frame Authentication Verification Gate
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x104
+    description: >
+      Incoming critical propulsion frames shall pass constant-time 256-bit HMAC
+      tag verification before forwarding to POSIX shared memory.
+    isolation_action: >
+      Reject unauthenticated frame, increment security violation counter, and
+      trigger DTC-0x104 isolation procedure if 3 consecutive frames fail.
