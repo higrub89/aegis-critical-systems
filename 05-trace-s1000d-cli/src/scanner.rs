@@ -61,7 +61,7 @@ fn collect_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), TraceE
             }
             collect_source_files(&path, out)?;
         } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            if matches!(ext, "c" | "h" | "cpp" | "hpp" | "rs") {
+            if matches!(ext, "c" | "h" | "cpp" | "hpp" | "rs" | "java") {
                 out.push(path);
             }
         }

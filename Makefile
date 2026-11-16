@@ -21,9 +21,9 @@ SRS_GCS_SPEC  := requirements/SRS-GCS-001.yaml
 S1000D_GCS    := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-04-00A-420A-A.xml
 TRACE_GCS_MD  := $(REPORTS_DIR)/DO-178C-GCS-Traceability-Matrix.md
 
-.PHONY: all build-c build-rust test audit trace clean fclean re
+.PHONY: all build-c build-rust build-java test audit trace clean fclean re
 
-all: build-rust build-c trace
+all: build-rust build-c build-java trace
 
 build-c: build-rust
 	@cmake -B $(BUILD_DIR) -S . -DCMAKE_BUILD_TYPE=Release
@@ -31,6 +31,11 @@ build-c: build-rust
 
 build-rust:
 	@cargo build --workspace --release
+
+build-java:
+	@mkdir -p $(BUILD_DIR)/java
+	@javac --release 21 -Xlint:all -Werror -d $(BUILD_DIR)/java \
+		$$(find 04-tactical-gcs/gcs-console/src -name '*.java')
 
 trace: build-rust
 	@mkdir -p $(REPORTS_DIR)
@@ -58,6 +63,7 @@ trace: build-rust
 test: all
 	@ctest --test-dir $(BUILD_DIR) --output-on-failure
 	@cargo test --workspace
+	@java -cp $(BUILD_DIR)/java com.aegis.gcs.TacticalGcsTest
 
 audit: test
 	@cargo clippy --workspace --all-targets -- -D warnings

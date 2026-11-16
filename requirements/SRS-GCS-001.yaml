@@ -34,3 +34,16 @@ requirements:
     isolation_action: >
       Close unresponsive client sockets deterministically on epoll error/hangup
       and raise DTC-0x402 if shared memory mapping is unavailable.
+
+  - id: SRS-GCS-003
+    title: Java 21 Tactical GCS Ingestion and SQLite Hazard Persistence
+    dal: DAL-C
+    hazard: MIL-882E-CAT-III
+    fault: DTC-0x403
+    description: >
+      The Java 21 GCS console shall ingest verified 32-byte TM frames using
+      ExecutorService and try-with-resources, persist records via DAO/DTO to
+      SQLite, and dispatch TC_SAFE_STATE on active hazards.
+    isolation_action: >
+      Persist DTC hazard record in dtc_events table and transmit TC_SAFE_STATE
+      back to the embedded TM/TC daemon.
