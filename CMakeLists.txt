@@ -88,4 +88,29 @@ if(EXISTS "${AEGIS_RUST_PARSER_LIB}")
     target_compile_options(test_rust_ffi PRIVATE ${AEGIS_C_FLAGS} -ffunction-sections -fdata-sections)
     target_link_options(test_rust_ffi PRIVATE -Wl,--gc-sections)
     add_test(NAME rust_nostd_ffi_verification COMMAND test_rust_ffi)
+
+    # C17 PREEMPT_RT Cyclic Executive & SocketCAN Node
+    add_library(aegis_gateway_rt STATIC
+        01-hybrid-can-gateway/src/aegis_rt_exec.c
+    )
+    target_link_libraries(aegis_gateway_rt PUBLIC
+        aegis_gateway_abi
+        "${AEGIS_RUST_PARSER_LIB}"
+    )
+    target_compile_options(aegis_gateway_rt PRIVATE ${AEGIS_C_FLAGS} -ffunction-sections -fdata-sections)
+
+    add_executable(aegis_gateway_node
+        01-hybrid-can-gateway/src/main_gateway.c
+    )
+    target_link_libraries(aegis_gateway_node PRIVATE aegis_gateway_rt)
+    target_compile_options(aegis_gateway_node PRIVATE ${AEGIS_C_FLAGS})
+    target_link_options(aegis_gateway_node PRIVATE -Wl,--gc-sections)
+
+    add_executable(test_gateway_exec
+        01-hybrid-can-gateway/src/test_gateway_exec.c
+    )
+    target_link_libraries(test_gateway_exec PRIVATE aegis_gateway_rt)
+    target_compile_options(test_gateway_exec PRIVATE ${AEGIS_C_FLAGS})
+    target_link_options(test_gateway_exec PRIVATE -Wl,--gc-sections)
+    add_test(NAME gateway_cyclic_exec_verification COMMAND test_gateway_exec)
 endif()

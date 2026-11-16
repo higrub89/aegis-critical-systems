@@ -58,3 +58,29 @@ requirements:
     isolation_action: >
       Reject malformed or unauthenticated frames prior to shared-memory dispatch
       and assert SAFE_STATE transition via DTC-0x104.
+
+  - id: SRS-GW-005
+    title: PREEMPT_RT Memory Locking and Deterministic Cyclic Scheduling
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x105
+    description: >
+      The C17 cyclic executive shall lock process virtual memory pages via
+      mlockall(MCL_CURRENT | MCL_FUTURE), bind to an isolated CPU core, and wake
+      deterministically at 1 kHz using CLOCK_MONOTONIC TIMER_ABSTIME.
+    isolation_action: >
+      Record RT privilege degradation in gateway status flags and abort
+      deterministic mode if cyclic period deadline is violated.
+
+  - id: SRS-GW-006
+    title: SocketCAN CAN-FD Ingestion and Safe-State Consecutive Fault Latch
+    dal: DAL-A
+    hazard: MIL-882E-CAT-I
+    fault: DTC-0x104
+    description: >
+      The gateway node shall ingest 48-byte authenticated CAN-FD frames from
+      SocketCAN (vcan0), dispatch zero-copy to Rust no_std FFI, and latch
+      AEGIS_GW_SAFE_STATE upon 3 consecutive authentication failures.
+    isolation_action: >
+      Latch AEGIS_GW_SAFE_STATE, halt forwarding to telemetry shared memory,
+      and raise DTC-0x104 fault alarm.

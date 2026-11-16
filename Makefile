@@ -41,6 +41,8 @@ audit: test
 		./$(BUILD_DIR)/test_abi_contract
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_rust_ffi
+	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
+		./$(BUILD_DIR)/test_gateway_exec
 	@echo "[AEGIS-AUDIT] Undefined Reference Gate (libaegis_gateway_abi.a):"
 	@nm -u $(BUILD_DIR)/libaegis_gateway_abi.a
 	@echo "[AEGIS-AUDIT] Rust no_std Panic-Free Symbol Gate (aegis_parser object):"
