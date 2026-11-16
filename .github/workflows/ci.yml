@@ -18,7 +18,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake valgrind sqlite3 libxml2-utils openjdk-21-jdk-headless
+            build-essential cmake valgrind sqlite3 libxml2-utils
+
+      - name: Setup Java 21 LTS
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
       - name: Setup Rust toolchain with Clippy
         uses: dtolnay/rust-toolchain@stable
