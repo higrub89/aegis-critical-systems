@@ -219,6 +219,7 @@ The comparison executes in identical CPU cycle counts regardless of byte match p
 | **HUMS Latency / WCET Gate** | Sub-Microsecond Edge Execution | **$p50 = 50\ \text{ns}$, $p99 = 69\ \text{ns}$** ($N = 10,000$; CI gate $\le 2/5\ \mu\text{s}$) | **PASS** |
 | **S1000D Issue 5.0 XML Validation** | XSD Schema & BREX Compliance | **4/4 XML Data Modules validated** via `xmllint --schema` + `verify_s1000d_brex` | **PASS** |
 | **DO-178C Traceability Lockfile** | Cryptographic Integrity | **14/14 requirements verified** across 16 source links (`trace.lock`) | **PASS** |
+| **Live SocketCAN `vcan0` Harness** | Multi-Daemon Closed Loop | **Passed** (`aegis_hil_sim`, `aegis_gateway_node`, `aegis_tmtc_daemon`, `TacticalGcsApp` with kernel `CAN_RAW_FILTER`) | **PASS** |
 
 ---
 
@@ -250,6 +251,9 @@ make coverage
 # 5. Run end-to-end multi-process verification pipeline
 # (Starts C17 epoll daemon, feeds simulated telemetry, verifies Java GCS & SQLite audit)
 ./scripts/test_e2e_pipeline.sh
+
+# 6. Run live SocketCAN vcan0 multi-daemon integration harness
+make test-vcan
 ```
 
 ---
