@@ -61,11 +61,47 @@ int main(int argc, char **argv)
         }
         else if (std::strcmp(argv[i], "--cycles") == 0 && (i + 1) < argc)
         {
-            max_cycles = static_cast<std::uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+            char *endptr = nullptr;
+            const unsigned long val = std::strtoul(argv[++i], &endptr, 10);
+            if (*endptr != '\0')
+            {
+                std::fprintf(stderr, "[AEGIS-HIL] Invalid --cycles value\n");
+                return 1;
+            }
+            max_cycles = static_cast<std::uint32_t>(val);
         }
         else if (std::strcmp(argv[i], "--fault") == 0 && (i + 1) < argc)
         {
-            injected_fault = parse_fault_mode(argv[++i]);
+            const char *mode_arg = argv[++i];
+            if (std::strcmp(mode_arg, "none") != 0 && parse_fault_mode(mode_arg) == aegis::hil::FaultMode::None)
+            {
+                std::fprintf(stderr, "[AEGIS-HIL] Unknown --fault mode: %s\n", mode_arg);
+                return 1;
+            }
+            injected_fault = parse_fault_mode(mode_arg);
+        }
+        else if (std::strcmp(argv[i], "--fault-at") == 0 && (i + 1) < argc)
+        {
+            char *endptr = nullptr;
+            const unsigned long val = std::strtoul(argv[++i], &endptr, 10);
+            if (*endptr != '\0')
+            {
+                std::fprintf(stderr, "[AEGIS-HIL] Invalid --fault-at value\n");
+                return 1;
+            }
+            fault_at_cycle = static_cast<std::uint32_t>(val);
+        }
+        else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0)
+        {
+            std::printf(
+                "Usage: %s [--iface IFACE] [--cycles N] [--fault none|thermal|surge|emi|auth] [--fault-at CYCLE]\n",
+                argv[0]);
+            return 0;
+        }
+        else
+        {
+            std::fprintf(stderr, "[AEGIS-HIL] Unknown or incomplete argument: %s\n", argv[i]);
+            return 1;
         }
     }
 

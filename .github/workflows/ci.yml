@@ -21,7 +21,7 @@ jobs:
             build-essential cmake valgrind sqlite3 libxml2-utils
 
       - name: Setup Java 21 LTS
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '21'

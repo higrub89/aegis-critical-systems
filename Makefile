@@ -21,7 +21,9 @@ SRS_GCS_SPEC  := requirements/SRS-GCS-001.yaml
 S1000D_GCS    := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-04-00A-420A-A.xml
 TRACE_GCS_MD  := $(REPORTS_DIR)/DO-178C-GCS-Traceability-Matrix.md
 
-.PHONY: all build-c build-rust build-java test audit trace xml-check sanitizers coverage clean fclean re
+S1000D_XSD   := requirements/schemas/s1000d-5.0-fault-profile.xsd
+
+.PHONY: all build-c build-rust build-java test test-vcan audit trace xml-check elf-check sanitizers coverage clean fclean re
 
 all: build-rust build-c build-java trace
 
@@ -70,8 +72,12 @@ test: all
 	@cargo test --workspace
 	@java -cp $(BUILD_DIR)/java com.aegis.gcs.TacticalGcsTest
 	@./scripts/test_e2e_pipeline.sh
+	@./scripts/test_vcan_daemons.sh $(BUILD_DIR)
 
-audit: test xml-check
+test-vcan: all
+	@./scripts/test_vcan_daemons.sh $(BUILD_DIR)
+
+audit: test xml-check elf-check
 	@cargo clippy --workspace --all-targets -- -D warnings -A unknown_lints -A clippy::chunks_exact_to_as_chunks
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_abi_contract
@@ -85,15 +91,18 @@ audit: test xml-check
 		./$(BUILD_DIR)/test_lockfree_hums
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_tmtc_daemon
-	@./$(BUILD_DIR)/aegis_hums_bench
+	@./$(BUILD_DIR)/aegis_hums_bench --max-p50-ns 2000 --max-p99-ns 5000
 	@echo "[AEGIS-AUDIT] Undefined Reference Gate (libaegis_gateway_abi.a):"
 	@nm -u $(BUILD_DIR)/libaegis_gateway_abi.a
 	@echo "[AEGIS-AUDIT] Rust no_std Panic-Free Symbol Gate (aegis_parser object):"
 	@nm -u target/release/libaegis_parser.a | awk '/aegis_parser.*:/{p=1;print;next} /:$$/{p=0} p && /U /{print}'
 
 xml-check: trace
-	@xmllint --noout $(REPORTS_DIR)/*.xml
-	@echo "[AEGIS-XML] All S1000D XML Data Modules well-formed."
+	@xmllint --noout --schema $(S1000D_XSD) $(REPORTS_DIR)/*.xml
+	@echo "[AEGIS-XML] All S1000D XML Data Modules schema-validated against $(S1000D_XSD)."
+
+elf-check: build-rust build-c
+	@./scripts/check_elf_budgets.sh $(BUILD_DIR) target/release/libaegis_parser.a
 
 sanitizers: build-rust
 	@cmake -B build-asan -S . -DCMAKE_BUILD_TYPE=Debug \
@@ -110,13 +119,14 @@ sanitizers: build-rust
 	@setarch "$$(uname -m)" -R ./build-tsan/test_lockfree_hums
 	@echo "[AEGIS-SAN] ASan + UBSan + TSan passed with zero violations."
 
-coverage: build-rust
+coverage: build-rust build-java
 	@cmake -B build-cov -S . -DCMAKE_BUILD_TYPE=Debug \
 		-DAEGIS_ENABLE_MALLOC_TRAP=OFF \
 		-DCMAKE_C_FLAGS="--coverage -O0 -g" \
 		-DCMAKE_CXX_FLAGS="--coverage -O0 -g"
 	@cmake --build build-cov --parallel
 	@ctest --test-dir build-cov --output-on-failure
+	@./scripts/test_cli_entrypoints.sh build-cov
 	@gcov -n $$(find build-cov -path '*CMakeFiles/aegis*' -o -path '*CMakeFiles/test_*' | grep '\.gcno$$') 2>/dev/null \
 		| awk '/File .*aegis-critical-systems/{print; f=1; next} f && /Lines executed/{print; f=0}'
 

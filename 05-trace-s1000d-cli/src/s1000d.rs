@@ -260,6 +260,65 @@ pub fn generate_s1000d_fault_xml(
     xml
 }
 
+/// Validates S1000D Issue 5.0 BREX business rules against generated XML and source SRS.
+///
+/// # Errors
+/// Returns [`TraceError::VerificationFailed`] if mandatory BREX metadata, DMC references,
+/// FIP procedures, or 64-char SHA-256 evidence digests are missing or malformed.
+pub fn verify_s1000d_brex(xml: &str, srs: &SrsDocument) -> Result<(), TraceError> {
+    if !xml.contains("securityClassification=\"01\"") {
+        return Err(TraceError::VerificationFailed(
+            "BREX violation: missing securityClassification=\"01\"".to_string(),
+        ));
+    }
+    if !xml.contains("<brexDmRef>")
+        || !xml.contains("infoCode=\"022\"")
+        || !xml.contains("itemLocationCode=\"D\"")
+    {
+        return Err(TraceError::VerificationFailed(
+            "BREX violation: missing mandatory BREX DM reference (infoCode=022-D)".to_string(),
+        ));
+    }
+    for req in &srs.requirements {
+        let fip_marker = format!(
+            "<faultIsolationProcedure id=\"FIP-{}\" faultCode=\"{}\">",
+            escape_xml(&req.id),
+            escape_xml(&req.fault)
+        );
+        if !xml.contains(&fip_marker) {
+            return Err(TraceError::VerificationFailed(format!(
+                "BREX violation: missing FIP procedure for {} ({})",
+                req.id, req.fault
+            )));
+        }
+        let step_marker = format!("<isolationStep id=\"STEP-{}-01\">", escape_xml(&req.id));
+        if !xml.contains(&step_marker) {
+            return Err(TraceError::VerificationFailed(format!(
+                "BREX violation: missing isolationStep for {}",
+                req.id
+            )));
+        }
+    }
+
+    let mut sha_count = 0usize;
+    for part in xml.split("SHA-256: ").skip(1) {
+        let digest = part.split('<').next().unwrap_or("");
+        if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(TraceError::VerificationFailed(format!(
+                "BREX violation: malformed SHA-256 evidence digest '{digest}'"
+            )));
+        }
+        sha_count += 1;
+    }
+    if sha_count < srs.requirements.len() {
+        return Err(TraceError::VerificationFailed(format!(
+            "BREX violation: expected >= {} SHA-256 trace evidence blocks, found {sha_count}",
+            srs.requirements.len()
+        )));
+    }
+    Ok(())
+}
+
 fn write_dm_code(xml: &mut String, dmc: &str) {
     let clean = dmc.strip_prefix("DMC-").unwrap_or(dmc);
     let parts: Vec<&str> = clean.split('-').collect();

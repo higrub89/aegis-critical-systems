@@ -126,8 +126,22 @@ int main(int argc, char **argv)
         {
             uint32_t tmp_cpu = 0U;
             if (parse_u32_arg(argv[++i], &tmp_cpu) != 0)
+            {
+                (void)fprintf(stderr, "[AEGIS-GW] Invalid --cpu value\n");
                 return (1);
+            }
             cfg.cpu_core = (int32_t)tmp_cpu;
+        }
+        else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0)
+        {
+            (void)printf("Usage: %s [--iface IFACE] [--shm NAME] [--cycles N] [--cpu CORE]\n",
+                         argv[0]);
+            return (0);
+        }
+        else
+        {
+            (void)fprintf(stderr, "[AEGIS-GW] Unknown or incomplete argument: %s\n", argv[i]);
+            return (1);
         }
     }
 

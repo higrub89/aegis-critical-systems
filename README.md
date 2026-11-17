@@ -207,7 +207,7 @@ The comparison executes in identical CPU cycle counts regardless of byte match p
 | Verification Gate | Target Requirement | Measured Result | Status |
 | :--- | :--- | :--- | :---: |
 | **C17 / C++23 CTest Suite** | Unit & Integration Verification | **7/7 passed** (`abi_contract`, `rust_nostd_ffi`, `gateway_cyclic_exec`, `hil_fsm_closed_loop`, `hums_lockfree`, `hums_malloc_trap`, `tmtc_epoll_crc32c`) | **PASS** |
-| **Rust Workspace Tests** | `aegis-parser` & `aegis-trace` | **7/7 passed** (RFC 4231 vectors, FIPS 180-4 SHA-256, AST scanner, S1000D generator) | **PASS** |
+| **Rust Workspace Tests** | `aegis-parser` & `aegis-trace` | **8/8 passed** (RFC 4231 vectors, FIPS 180-4 SHA-256, AST scanner, S1000D & BREX gate) | **PASS** |
 | **Java 21 Tactical GCS** | DAO/DTO, Virtual Threads, SQLite | **Passed** (`CRC-32C 0xE3069283`, multi-frame ingestion, emergency safe-state trip) | **PASS** |
 | **Memory Leak Audit (`Valgrind`)** | Zero Memory Leaks | **0 errors, 0 bytes leaked** across all test suites | **PASS** |
 | **Descriptor Audit (`Valgrind`)** | Zero Leaked File Descriptors | **0 leaked file descriptors** upon clean exit | **PASS** |
@@ -215,8 +215,9 @@ The comparison executes in identical CPU cycle counts regardless of byte match p
 | **Sanitizers (`ASan` + `UBSan`)** | Memory Bounds & UB Freedom | **0 violations** detected across C17 and C++23 suites | **PASS** |
 | **ThreadSanitizer (`TSan`)** | Zero Data Races in Lock-Free SPSC | **0 data races** detected in multithreaded stress testing | **PASS** |
 | **Rust Panic-Free Gate (`nm -u`)** | `no_std` Determinism | **0 `core::panicking` symbols** in `libaegis_parser.a` | **PASS** |
-| **HUMS Latency Benchmark** | Sub-Microsecond Edge Execution | **$p50 = 49\ \text{ns}$, $p99 = 58\ \text{ns}$, $\text{WCET} = 165\ \text{ns}$** ($N = 10,000$) | **PASS** |
-| **S1000D Issue 5.0 XML Validation** | BREX & Schema Compliance | **All XML Data Modules validated** via `xmllint --noout` | **PASS** |
+| **ELF Footprint Budget Gate** | Static `.text`/`.data`/`.bss` Limits | **`aegis_parser`: 4065 B `.text`, 0 B `.data`/`.bss`**; all subsystems within budget | **PASS** |
+| **HUMS Latency / WCET Gate** | Sub-Microsecond Edge Execution | **$p50 = 50\ \text{ns}$, $p99 = 69\ \text{ns}$** ($N = 10,000$; CI gate $\le 2/5\ \mu\text{s}$) | **PASS** |
+| **S1000D Issue 5.0 XML Validation** | XSD Schema & BREX Compliance | **4/4 XML Data Modules validated** via `xmllint --schema` + `verify_s1000d_brex` | **PASS** |
 | **DO-178C Traceability Lockfile** | Cryptographic Integrity | **14/14 requirements verified** across 16 source links (`trace.lock`) | **PASS** |
 
 ---
@@ -264,14 +265,18 @@ aegis-critical-systems/
 ├── CMakeLists.txt                   # Strict C17 & C++23 build configuration
 ├── Cargo.toml                       # Cargo monorepo workspace manifest
 ├── requirements/
+│   ├── schemas/s1000d-5.0-fault-profile.xsd # Offline S1000D Issue 5.0 XSD schema
 │   ├── SRS-GW-001.yaml              # Hybrid Gateway low-level requirements (DAL-A)
 │   ├── SRS-HIL-001.yaml             # HIL HV-BMS simulator requirements (DAL-A)
 │   ├── SRS-HUMS-001.yaml            # Lock-free HUMS requirements (DAL-B)
 │   ├── SRS-GCS-001.yaml             # Tactical GCS requirements (DAL-C)
 │   └── trace.lock                   # Cryptographic SHA-256 fingerprint lockfile
 ├── scripts/
+│   ├── check_elf_budgets.sh         # ELF .text/.data/.bss budget verification gate
 │   ├── setup_vcan.sh                # Linux SocketCAN vcan0 configuration script
-│   └── test_e2e_pipeline.sh         # Multi-process E2E integration test script
+│   ├── test_cli_entrypoints.sh      # CLI entrypoint & WCET regression gate
+│   ├── test_e2e_pipeline.sh         # Multi-process E2E integration test script
+│   └── test_vcan_daemons.sh         # Live SocketCAN vcan0 multi-daemon test harness
 ├── 01-hybrid-can-gateway/
 │   ├── include/aegis_gateway.h      # Gateway cyclic executive and filter API
 │   ├── include/aegis_frame_abi.h    # 128-byte cache-aligned FFI ABI context
@@ -305,4 +310,4 @@ aegis-critical-systems/
 | **Phase 3** | Wait-free SPSC HUMS, Q15 EKF, C17 `epoll` TM/TC daemon, Java 21 GCS | **DONE** |
 | **Phase 4** | Anti-replay DO-326A, ASan/UBSan/TSan, `trace.lock` gate, GitHub Actions CI | **DONE** |
 | **Phase 5** | Lock-free Seqlock SHM, TCP fragment reassembly, `SIGABRT` trap test, full multi-process E2E | **DONE** |
-| **Phase 6** | Live `vcan0` multi-daemon harness, full S1000D XSD/BREX validation, ELF size & WCET CI gates | **PLANNED** |
+| **Phase 6** | Live `vcan0` multi-daemon harness, full S1000D XSD/BREX validation, ELF size & WCET CI gates | **DONE** |

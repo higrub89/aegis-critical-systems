@@ -2,7 +2,7 @@
 
 use aegis_trace::s1000d::{
     check_orphan_requirements, generate_s1000d_fault_xml, render_trace_lock,
-    render_trace_matrix_md, verify_trace_lock, verify_traceability,
+    render_trace_matrix_md, verify_s1000d_brex, verify_trace_lock, verify_traceability,
 };
 use aegis_trace::scanner::scan_directory;
 use aegis_trace::srs::SrsDocument;
@@ -154,6 +154,7 @@ fn run() -> Result<(), TraceError> {
         if srs_docs.len() == 1 {
             if let Some(xml_path) = &cfg.out_xml {
                 let xml = generate_s1000d_fault_xml(srs, &coverage);
+                verify_s1000d_brex(&xml, srs)?;
                 write_output_file(xml_path, &xml)?;
             }
             if let Some(matrix_path) = &cfg.out_matrix {

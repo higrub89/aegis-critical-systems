@@ -1,8 +1,8 @@
 //! Integration and unit verification suite for `aegis-trace`.
 
 use aegis_trace::s1000d::{
-    check_orphan_requirements, generate_s1000d_fault_xml, render_trace_lock, verify_trace_lock,
-    verify_traceability,
+    check_orphan_requirements, generate_s1000d_fault_xml, render_trace_lock, verify_s1000d_brex,
+    verify_trace_lock, verify_traceability,
 };
 use aegis_trace::scanner::scan_source_str;
 use aegis_trace::sha256::sha256_hex;
@@ -176,4 +176,50 @@ int unknown_fn(void) { return 0; }
 ";
     let orphan_records = scan_source_str(orphan_code, "orphan.c");
     assert!(check_orphan_requirements(&[srs], &orphan_records).is_err());
+}
+
+#[test]
+fn s1000d_brex_rule_gate_accepts_valid_and_rejects_tampered() {
+    let yaml = r"
+document_id: SRS-BREX-TEST
+subsystem: 04-tactical-gcs
+dal_level: DAL-C
+s1000d_dmc: DMC-AEGIS-A-24-30-04-00A-420A-A
+
+requirements:
+  - id: SRS-GCS-001
+    title: Castagnoli CRC-32C
+    dal: DAL-C
+    hazard: MIL-882E-CAT-III
+    fault: DTC-0x401
+    description: >
+      Verify CRC-32C checksum.
+    isolation_action: >
+      Discard corrupted packet.
+";
+    let srs_res = SrsDocument::parse_yaml(yaml);
+    assert!(srs_res.is_ok());
+    let Ok(srs) = srs_res else {
+        return;
+    };
+    let code = r"
+// @req SRS-GCS-001
+// @fault DTC-0x401
+// @hazard MIL-882E-CAT-III
+unsigned int calc_crc(void) { return 0xE3069283U; }
+";
+    let records = scan_source_str(code, "crc.c");
+    let cov_res = verify_traceability(&srs, &records);
+    assert!(cov_res.is_ok());
+    let Ok(cov) = cov_res else {
+        return;
+    };
+    let xml = generate_s1000d_fault_xml(&srs, &cov);
+    assert!(verify_s1000d_brex(&xml, &srs).is_ok());
+
+    let bad_sec = xml.replace("securityClassification=\"01\"", "securityClassification=\"09\"");
+    assert!(verify_s1000d_brex(&bad_sec, &srs).is_err());
+
+    let bad_brex = xml.replace("infoCode=\"022\"", "infoCode=\"999\"");
+    assert!(verify_s1000d_brex(&bad_brex, &srs).is_err());
 }

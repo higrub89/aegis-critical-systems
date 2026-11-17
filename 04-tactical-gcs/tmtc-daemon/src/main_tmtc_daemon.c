@@ -75,6 +75,16 @@ int main(int argc, char **argv)
         {
             shm_name = argv[++arg_i];
         }
+        else if (strcmp(argv[arg_i], "--help") == 0 || strcmp(argv[arg_i], "-h") == 0)
+        {
+            (void)printf("Usage: %s [--port PORT] [--shm NAME]\n", argv[0]);
+            return (0);
+        }
+        else
+        {
+            (void)fprintf(stderr, "[AEGIS-TMTC] Unknown or incomplete argument: %s\n", argv[arg_i]);
+            return (1);
+        }
     }
 
     (void)memset(&sa, 0, sizeof(sa));
