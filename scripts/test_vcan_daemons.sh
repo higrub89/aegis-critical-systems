@@ -101,11 +101,11 @@ kill -TERM "${GW_PID}" 2>/dev/null || true
 wait "${GW_PID}" 2>/dev/null || true
 GW_PID=""
 
-if grep -q "rejected=0" "${BUILD_DIR}/vcan_gw.log"; then
-    echo "[AEGIS-VCAN] Kernel CAN_RAW_FILTER verified: 0 spurious 0x299 frames reached gateway parser."
+cat "${BUILD_DIR}/vcan_gw.log"
+if grep -q "rejected=0" "${BUILD_DIR}/vcan_gw.log" && ! grep -q "ok=0 " "${BUILD_DIR}/vcan_gw.log"; then
+    echo "[AEGIS-VCAN] Kernel CAN_RAW_FILTER verified: spurious 0x299 frames dropped, valid 0x120 frames accepted."
 else
-    cat "${BUILD_DIR}/vcan_gw.log"
-    echo "[AEGIS-VCAN] FAIL: spurious CAN frames were not filtered in kernel"
+    echo "[AEGIS-VCAN] FAIL: gateway did not accept 0x120 frames or failed to filter 0x299"
     exit 1
 fi
 rm -f "${BUILD_DIR}/vcan_gw.log"

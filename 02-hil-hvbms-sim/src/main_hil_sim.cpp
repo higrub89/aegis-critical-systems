@@ -137,6 +137,7 @@ int main(int argc, char **argv)
     std::printf("[AEGIS-HIL] HV-BMS Plant STARTED on '%s' (1 kHz, cycles=%u)\n",
                 iface,
                 max_cycles);
+    (void)std::fflush(stdout);
 
     for (std::uint32_t c = 0U; (max_cycles == 0U || c < max_cycles) && g_hil_stop == 0; ++c)
     {

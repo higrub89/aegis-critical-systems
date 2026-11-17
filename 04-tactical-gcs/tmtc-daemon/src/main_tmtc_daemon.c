@@ -152,6 +152,7 @@ int main(int argc, char **argv)
                  (unsigned)port,
                  shm_name,
                  owns_shm);
+    (void)fflush(stdout);
 
     while (g_tmtc_stop == 0)
     {

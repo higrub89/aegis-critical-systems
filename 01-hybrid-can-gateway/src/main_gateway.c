@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 static volatile sig_atomic_t g_stop_requested = 0;
@@ -190,34 +191,43 @@ int main(int argc, char **argv)
                  iface,
                  g_state.rt_locked,
                  shm_bus != NULL ? shm_name : "disabled");
+    (void)fflush(stdout);
 
-    stop_local = 0;
-    while (g_stop_requested == 0 && g_state.mode != AEGIS_GW_SAFE_STATE)
     {
-        (void)aegis_gw_run_loop(&g_state, can_fd, 1U, &stop_local);
-
-        if (shm_bus != NULL)
+        struct timespec next_wakeup;
+        (void)clock_gettime(CLOCK_MONOTONIC, &next_wakeup);
+        stop_local = 0;
+        while (g_stop_requested == 0 && g_state.mode != AEGIS_GW_SAFE_STATE)
         {
-            if (__atomic_load_n(&shm_bus->tc_safe_state_req, __ATOMIC_ACQUIRE) != 0U)
+            uint64_t total_ns;
+
+            (void)aegis_gw_run_loop(&g_state, can_fd, 1U, &stop_local);
+
+            if (shm_bus != NULL)
             {
-                g_state.mode = AEGIS_GW_SAFE_STATE;
-                g_state.last_dtc = AEGIS_DTC_AUTH_FAILURE;
-                __atomic_fetch_add(&shm_bus->tc_ack, 1U, __ATOMIC_RELEASE);
+                if (__atomic_load_n(&shm_bus->tc_safe_state_req, __ATOMIC_ACQUIRE) != 0U)
+                {
+                    g_state.mode = AEGIS_GW_SAFE_STATE;
+                    g_state.last_dtc = AEGIS_DTC_AUTH_FAILURE;
+                    __atomic_fetch_add(&shm_bus->tc_ack, 1U, __ATOMIC_RELEASE);
+                }
+                aegis_shm_publish(shm_bus,
+                                  &g_state.last_telemetry,
+                                  (uint16_t)g_state.mode,
+                                  g_state.last_dtc,
+                                  aegis_monotonic_ns());
             }
-            aegis_shm_publish(shm_bus,
-                              &g_state.last_telemetry,
-                              (uint16_t)g_state.mode,
-                              g_state.last_dtc,
-                              aegis_monotonic_ns());
-        }
 
-        if (max_cycles != 0U)
-        {
-            if (g_state.cycles_executed >= max_cycles)
+            if (max_cycles != 0U && g_state.cycles_executed >= max_cycles)
                 break;
+            if (g_stop_requested != 0)
+                stop_local = 1;
+
+            total_ns = (uint64_t)next_wakeup.tv_nsec + cfg.period_ns;
+            next_wakeup.tv_sec += (time_t)(total_ns / 1000000000ULL);
+            next_wakeup.tv_nsec = (long)(total_ns % 1000000000ULL);
+            (void)clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next_wakeup, NULL);
         }
-        if (g_stop_requested != 0)
-            stop_local = 1;
     }
 
     if (shm_bus != NULL)
