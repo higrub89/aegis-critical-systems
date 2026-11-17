@@ -82,18 +82,18 @@ for _ in range(5):
 s.close()
 PY
 
-# Run HIL simulator at 1 kHz for 1.5s: nominal for 350ms, then inject ThermalRunaway
-"${BUILD_DIR}/aegis_hil_sim" --iface "${IFACE}" --cycles 1500 --fault thermal --fault-at 350 &
+# Run HIL simulator at 1 kHz for 2.0s: nominal for 900ms (covers JVM startup), then ThermalRunaway
+"${BUILD_DIR}/aegis_hil_sim" --iface "${IFACE}" --cycles 2000 --fault thermal --fault-at 900 &
 HIL_PID=$!
 
 # Allow initial nominal frames (contactor=2) to populate POSIX SHM before GCS connects
-sleep 0.15
+sleep 0.1
 
 java -cp build/java com.aegis.gcs.TacticalGcsApp \
     --host 127.0.0.1 \
     --port "${PORT}" \
     --db "${DB_PATH}" \
-    --count 20
+    --count 25
 
 wait "${HIL_PID}" || true
 HIL_PID=""
