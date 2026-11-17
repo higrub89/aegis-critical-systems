@@ -164,7 +164,7 @@ int main(int argc, char **argv)
 
     const aegis::hums::Q15FilterConfig ekf_cfg {
         3277,   /* K = 0.10 in Q15 (slow thermal plant tracking) */
-        500,    /* ~1.5% innovation anomaly threshold */
+        350,    /* ~1.07% innovation anomaly threshold (~0.43 C rapid drift) */
         417750, /* nominal loaded voltage */
         50000,
         250,
