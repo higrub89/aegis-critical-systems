@@ -5,8 +5,10 @@
  * Standard: ISO C++23 | POSIX.1b | -fno-exceptions -fno-rtti
  * ========================================================================== */
 
+#include "aegis_shm_bus.h"
 #include "q15_ekf.hpp"
 #include "spsc_ring.hpp"
+#include <atomic>
 #include <cstdio>
 #include <thread>
 #include <unistd.h>
@@ -199,6 +201,59 @@ int test_spsc_ring_overrun_saturation() noexcept
     return 0;
 }
 
+int test_seqlock_shm_concurrent_reader_writer() noexcept
+{
+    alignas(64) static t_aegis_tmtc_shm shared_bus {};
+    std::atomic<bool>                   done {false};
+    std::atomic<int>                    torn_error {0};
+
+    constexpr std::uint32_t kIterations = 50000U;
+    std::thread             reader([&]() noexcept {
+        while (!done.load(std::memory_order_acquire))
+        {
+            t_aegis_telemetry_data tel {};
+            std::uint16_t          mode = 0U;
+            std::uint16_t          dtc = 0U;
+            std::uint64_t          ts = 0ULL;
+
+            const int rc = aegis_shm_read_snapshot(&shared_bus, &tel, &mode, &dtc, &ts);
+            if (rc == 0 && ts != 0ULL)
+            {
+                const std::uint32_t tick = static_cast<std::uint32_t>(ts / 1000ULL);
+                if (tel.pack_voltage_mv != (400000U + tick)
+                    || tel.pack_current_ma != static_cast<std::int32_t>(tick)
+                    || tel.max_cell_temp_dc != static_cast<std::int16_t>(250U + (tick % 200U))
+                    || mode != static_cast<std::uint16_t>(tick % 3U)
+                    || dtc != static_cast<std::uint16_t>(tick & 0xFFFFU))
+                {
+                    torn_error.store(1, std::memory_order_release);
+                    break;
+                }
+            }
+        }
+    });
+
+    for (std::uint32_t tick = 1U; tick <= kIterations; ++tick)
+    {
+        const t_aegis_telemetry_data tel {
+            400000U + tick,
+            static_cast<std::int32_t>(tick),
+            static_cast<std::int16_t>(250U + (tick % 200U)),
+            2U,
+            0U
+        };
+        aegis_shm_publish(&shared_bus,
+                          &tel,
+                          static_cast<std::uint16_t>(tick % 3U),
+                          static_cast<std::uint16_t>(tick & 0xFFFFU),
+                          static_cast<std::uint64_t>(tick) * 1000ULL);
+    }
+
+    done.store(true, std::memory_order_release);
+    reader.join();
+    return torn_error.load(std::memory_order_acquire);
+}
+
 } // namespace
 
 int main()
@@ -227,6 +282,12 @@ int main()
         std::fprintf(stderr, "[FAIL] test_q15_anomaly_inference: %d\n", rc);
         return 1;
     }
-    std::printf("[PASS] Wait-Free SPSC Ring, POSIX SHM & Q15 Fixed-Point EKF verified.\n");
+    rc = test_seqlock_shm_concurrent_reader_writer();
+    if (rc != 0)
+    {
+        std::fprintf(stderr, "[FAIL] test_seqlock_shm_concurrent_reader_writer: %d\n", rc);
+        return 1;
+    }
+    std::printf("[PASS] Wait-Free SPSC Ring, POSIX SHM Seqlock & Q15 Fixed-Point EKF verified.\n");
     return 0;
 }

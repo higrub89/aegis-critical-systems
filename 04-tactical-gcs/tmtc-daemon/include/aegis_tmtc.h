@@ -47,6 +47,12 @@ typedef struct s_aegis_tmtc_packet
 AEGIS_STATIC_ASSERT(sizeof(t_aegis_tmtc_packet) == AEGIS_TMTC_PKT_SIZE,
                     "TM/TC wire packet must be exactly 32 bytes");
 
+typedef struct s_aegis_tmtc_rx_slot
+{
+    uint8_t buf[AEGIS_TMTC_PKT_SIZE];
+    size_t  len;
+} t_aegis_tmtc_rx_slot;
+
 uint32_t aegis_crc32c(const void *data, size_t len);
 int      aegis_tmtc_encode(uint8_t                       out_buf[AEGIS_TMTC_PKT_SIZE],
                            uint8_t                       msg_type,
@@ -56,6 +62,17 @@ int      aegis_tmtc_encode(uint8_t                       out_buf[AEGIS_TMTC_PKT_
 int      aegis_tmtc_decode_verify(const uint8_t        in_buf[AEGIS_TMTC_PKT_SIZE],
                                   t_aegis_tmtc_packet *out_pkt);
 int      aegis_tmtc_server_open_tcp(uint16_t port, uint16_t *out_bound_port);
+int      aegis_tmtc_epoll_poll_ex(int                   epoll_fd,
+                                  int                   listen_fd,
+                                  int                  *client_fds,
+                                  t_aegis_tmtc_rx_slot *rx_slots,
+                                  size_t                max_clients,
+                                  t_aegis_tmtc_shm     *shm,
+                                  uint32_t             *seq_counter,
+                                  uint32_t             *out_tc_received,
+                                  uint8_t              *out_last_tc_type,
+                                  uint32_t             *out_crc_errors,
+                                  int                   timeout_ms);
 int      aegis_tmtc_epoll_poll_once(int               epoll_fd,
                                     int               listen_fd,
                                     int              *client_fds,

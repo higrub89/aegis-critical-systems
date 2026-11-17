@@ -183,6 +183,31 @@ target_link_options(test_lockfree_hums PRIVATE
 )
 add_test(NAME hums_lockfree_verification COMMAND test_lockfree_hums)
 
+if(AEGIS_ENABLE_MALLOC_TRAP)
+    add_executable(test_malloc_trap
+        03-lockfree-hums/src/test_malloc_trap.cpp
+    )
+    target_link_libraries(test_malloc_trap PRIVATE aegis_hums_core)
+    target_compile_options(test_malloc_trap PRIVATE
+        ${AEGIS_CXX_FLAGS}
+        -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc
+    )
+    target_link_options(test_malloc_trap PRIVATE
+        -Wl,--gc-sections
+        -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc
+    )
+    add_test(NAME hums_malloc_trap_verification COMMAND test_malloc_trap)
+endif()
+
+if(EXISTS "${AEGIS_RUST_PARSER_LIB}")
+    add_executable(aegis_e2e_hil_gw_driver
+        02-hil-hvbms-sim/src/e2e_closed_loop_driver.cpp
+    )
+    target_link_libraries(aegis_e2e_hil_gw_driver PRIVATE aegis_hil_plant aegis_hums_core)
+    target_compile_options(aegis_e2e_hil_gw_driver PRIVATE ${AEGIS_CXX_FLAGS})
+    target_link_options(aegis_e2e_hil_gw_driver PRIVATE -Wl,--gc-sections)
+endif()
+
 # ------------------------------------------------------------------------------
 # Subsystem 04: Tactical GCS - Embedded C17 TM/TC Daemon
 # ------------------------------------------------------------------------------

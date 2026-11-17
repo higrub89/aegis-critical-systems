@@ -102,12 +102,15 @@ static int test_epoll_shm_tcp_loopback(void)
         return (2);
     }
 
+    t_aegis_telemetry_data init_tel;
+
     (void)memset(shm_ptr, 0, sizeof(t_aegis_tmtc_shm));
-    shm_ptr->telemetry.pack_voltage_mv = 399500U;
-    shm_ptr->telemetry.pack_current_ma = 48000;
-    shm_ptr->telemetry.max_cell_temp_dc = 285;
-    shm_ptr->telemetry.contactor_state = 2U;
-    shm_ptr->timestamp_ns = 500000000ULL;
+    init_tel.pack_voltage_mv = 399500U;
+    init_tel.pack_current_ma = 48000;
+    init_tel.max_cell_temp_dc = 285;
+    init_tel.contactor_state = 2U;
+    init_tel.fault_mask = 0U;
+    aegis_shm_publish(shm_ptr, &init_tel, 1U, 0U, 500000000ULL);
 
     bound_port = 0U;
     listen_fd = aegis_tmtc_server_open_tcp(0U, &bound_port);
@@ -197,6 +200,175 @@ static int test_epoll_shm_tcp_loopback(void)
     return (0);
 }
 
+static int test_epoll_tcp_fragmentation_and_crc_reject(void)
+{
+    char                   shm_name[64];
+    int                    shm_fd;
+    t_aegis_tmtc_shm      *shm_ptr;
+    uint16_t               bound_port;
+    int                    listen_fd;
+    int                    epoll_fd;
+    int                    client_sock;
+    int                    client_fds[AEGIS_TMTC_MAX_CLIENTS];
+    t_aegis_tmtc_rx_slot   rx_slots[AEGIS_TMTC_MAX_CLIENTS];
+    struct epoll_event     ev;
+    struct sockaddr_in     dst;
+    uint32_t               seq;
+    uint32_t               tc_count;
+    uint32_t               crc_errors;
+    uint8_t                last_tc;
+    uint8_t                bad_buf[AEGIS_TMTC_PKT_SIZE];
+    uint8_t                tc_buf[AEGIS_TMTC_PKT_SIZE];
+    t_aegis_telemetry_data tel;
+    size_t                 i;
+
+    (void)snprintf(shm_name, sizeof(shm_name), "/aegis_tmtc_frag_%ld", (long)getpid());
+    shm_fd = shm_open(shm_name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    if (shm_fd < 0 || ftruncate(shm_fd, (off_t)sizeof(t_aegis_tmtc_shm)) != 0)
+        return (1);
+    shm_ptr = (t_aegis_tmtc_shm *)mmap(
+        NULL, sizeof(t_aegis_tmtc_shm), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    (void)close(shm_fd);
+    if (shm_ptr == MAP_FAILED)
+    {
+        (void)shm_unlink(shm_name);
+        return (2);
+    }
+
+    (void)memset(shm_ptr, 0, sizeof(t_aegis_tmtc_shm));
+    (void)memset(&tel, 0, sizeof(tel));
+    tel.pack_voltage_mv = 401000U;
+    aegis_shm_publish(shm_ptr, &tel, 1U, 0U, 900000000ULL);
+
+    bound_port = 0U;
+    listen_fd = aegis_tmtc_server_open_tcp(0U, &bound_port);
+    epoll_fd = epoll_create1(0);
+    if (listen_fd < 0 || epoll_fd < 0)
+        return (3);
+
+    (void)memset(&ev, 0, sizeof(ev));
+    ev.events = EPOLLIN;
+    ev.data.fd = listen_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) != 0)
+        return (4);
+
+    (void)memset(rx_slots, 0, sizeof(rx_slots));
+    for (i = 0U; i < AEGIS_TMTC_MAX_CLIENTS; ++i)
+        client_fds[i] = -1;
+
+    client_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_sock < 0)
+        return (5);
+    (void)memset(&dst, 0, sizeof(dst));
+    dst.sin_family = AF_INET;
+    dst.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    dst.sin_port = htons(bound_port);
+    if (connect(client_sock, (struct sockaddr *)&dst, sizeof(dst)) != 0)
+        return (6);
+
+    seq = 0U;
+    tc_count = 0U;
+    crc_errors = 0U;
+    last_tc = 0U;
+
+    /* Accept client */
+    if (aegis_tmtc_epoll_poll_ex(epoll_fd,
+                                 listen_fd,
+                                 client_fds,
+                                 rx_slots,
+                                 AEGIS_TMTC_MAX_CLIENTS,
+                                 shm_ptr,
+                                 &seq,
+                                 &tc_count,
+                                 &last_tc,
+                                 &crc_errors,
+                                 10)
+        != 0)
+        return (7);
+
+    /* Send corrupted TC frame -> must increment crc_errors and NOT trigger safe state */
+    if (aegis_tmtc_encode(bad_buf, (uint8_t)AEGIS_MSG_TC_SAFE_STATE, 1U, 100U, &tel) != 0)
+        return (8);
+    bad_buf[12] ^= 0x20U;
+    if (send(client_sock, bad_buf, AEGIS_TMTC_PKT_SIZE, 0) != (ssize_t)AEGIS_TMTC_PKT_SIZE)
+        return (9);
+
+    if (aegis_tmtc_epoll_poll_ex(epoll_fd,
+                                 listen_fd,
+                                 client_fds,
+                                 rx_slots,
+                                 AEGIS_TMTC_MAX_CLIENTS,
+                                 shm_ptr,
+                                 &seq,
+                                 &tc_count,
+                                 &last_tc,
+                                 &crc_errors,
+                                 10)
+        != 0)
+        return (10);
+
+    if (crc_errors != 1U || tc_count != 0U
+        || __atomic_load_n(&shm_ptr->tc_safe_state_req, __ATOMIC_ACQUIRE) != 0U)
+        return (11);
+
+    /* Send valid TC_SAFE_STATE fragmented across two TCP chunks (13B + 19B) */
+    if (aegis_tmtc_encode(tc_buf, (uint8_t)AEGIS_MSG_TC_SAFE_STATE, 2U, 200U, &tel) != 0)
+        return (12);
+    if (send(client_sock, tc_buf, 13U, 0) != 13)
+        return (13);
+    if (aegis_tmtc_epoll_poll_ex(epoll_fd,
+                                 listen_fd,
+                                 client_fds,
+                                 rx_slots,
+                                 AEGIS_TMTC_MAX_CLIENTS,
+                                 shm_ptr,
+                                 &seq,
+                                 &tc_count,
+                                 &last_tc,
+                                 &crc_errors,
+                                 10)
+        != 0)
+        return (14);
+
+    if (tc_count != 0U || rx_slots[0].len != 13U)
+        return (15);
+
+    if (send(client_sock, tc_buf + 13U, AEGIS_TMTC_PKT_SIZE - 13U, 0)
+        != (ssize_t)(AEGIS_TMTC_PKT_SIZE - 13U))
+        return (16);
+    if (aegis_tmtc_epoll_poll_ex(epoll_fd,
+                                 listen_fd,
+                                 client_fds,
+                                 rx_slots,
+                                 AEGIS_TMTC_MAX_CLIENTS,
+                                 shm_ptr,
+                                 &seq,
+                                 &tc_count,
+                                 &last_tc,
+                                 &crc_errors,
+                                 10)
+        != 0)
+        return (17);
+
+    uint32_t tc_req = __atomic_load_n(&shm_ptr->tc_safe_state_req, __ATOMIC_ACQUIRE);
+
+    (void)close(client_sock);
+    for (i = 0U; i < AEGIS_TMTC_MAX_CLIENTS; ++i)
+    {
+        if (client_fds[i] >= 0)
+            (void)close(client_fds[i]);
+    }
+    (void)close(epoll_fd);
+    (void)close(listen_fd);
+    (void)munmap(shm_ptr, sizeof(t_aegis_tmtc_shm));
+    (void)shm_unlink(shm_name);
+
+    if (tc_count != 1U || crc_errors != 1U || last_tc != (uint8_t)AEGIS_MSG_TC_SAFE_STATE
+        || tc_req != 1U)
+        return (18);
+    return (0);
+}
+
 int main(void)
 {
     int rc;
@@ -217,6 +389,12 @@ int main(void)
     if (rc != 0)
     {
         (void)fprintf(stderr, "[FAIL] test_epoll_shm_tcp_loopback: %d\n", rc);
+        return (1);
+    }
+    rc = test_epoll_tcp_fragmentation_and_crc_reject();
+    if (rc != 0)
+    {
+        (void)fprintf(stderr, "[FAIL] test_epoll_tcp_fragmentation_and_crc_reject: %d\n", rc);
         return (1);
     }
     (void)printf("[PASS] Hardware CRC-32C, 32B TM/TC Framing & epoll SHM Bridge verified.\n");

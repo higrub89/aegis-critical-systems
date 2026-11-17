@@ -174,10 +174,11 @@ int aegis_tmtc_server_open_tcp(uint16_t port, uint16_t *out_bound_port)
     return (fd);
 }
 
-static void register_client_slot(int         epoll_fd,
-                                 int         client_fd,
-                                 int        *client_fds,
-                                 size_t      max_clients)
+static void register_client_slot(int                   epoll_fd,
+                                 int                   client_fd,
+                                 int                  *client_fds,
+                                 t_aegis_tmtc_rx_slot *rx_slots,
+                                 size_t                max_clients)
 {
     struct epoll_event ev;
     size_t             i;
@@ -197,6 +198,8 @@ static void register_client_slot(int         epoll_fd,
             if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev) == 0)
             {
                 client_fds[i] = client_fd;
+                if (rx_slots != NULL)
+                    rx_slots[i].len = 0U;
                 return;
             }
             break;
@@ -205,7 +208,11 @@ static void register_client_slot(int         epoll_fd,
     (void)close(client_fd);
 }
 
-static void remove_client_slot(int epoll_fd, int client_fd, int *client_fds, size_t max_clients)
+static void remove_client_slot(int                   epoll_fd,
+                               int                   client_fd,
+                               int                  *client_fds,
+                               t_aegis_tmtc_rx_slot *rx_slots,
+                               size_t                max_clients)
 {
     size_t i;
 
@@ -216,9 +223,212 @@ static void remove_client_slot(int epoll_fd, int client_fd, int *client_fds, siz
         if (client_fds[i] == client_fd)
         {
             client_fds[i] = -1;
+            if (rx_slots != NULL)
+                rx_slots[i].len = 0U;
             break;
         }
     }
+}
+
+static size_t find_client_slot(const int *client_fds, size_t max_clients, int fd)
+{
+    size_t i;
+
+    for (i = 0U; i < max_clients; ++i)
+    {
+        if (client_fds[i] == fd)
+            return (i);
+    }
+    return (max_clients);
+}
+
+static int send_packet_nonblock(int fd, const uint8_t *buf, size_t len)
+{
+    size_t   sent_total;
+    uint32_t retries;
+
+    sent_total = 0U;
+    retries = 0U;
+    while (sent_total < len && retries < 8U)
+    {
+        ssize_t n = send(fd, buf + sent_total, len - sent_total, MSG_NOSIGNAL);
+        if (n > 0)
+        {
+            sent_total += (size_t)n;
+        }
+        else if (n < 0 && errno == EINTR)
+        {
+            retries += 1U;
+        }
+        else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        {
+            if (sent_total == 0U)
+                return (0);
+            retries += 1U;
+        }
+        else
+        {
+            return (-1);
+        }
+    }
+    return (sent_total == len ? 0 : -1);
+}
+
+static void process_client_rx(int                   epoll_fd,
+                              int                   fd,
+                              int                  *client_fds,
+                              t_aegis_tmtc_rx_slot *rx_slots,
+                              size_t                max_clients,
+                              t_aegis_tmtc_shm     *shm,
+                              uint32_t             *out_tc_received,
+                              uint8_t              *out_last_tc_type,
+                              uint32_t             *out_crc_errors)
+{
+    size_t slot_idx;
+
+    slot_idx = find_client_slot(client_fds, max_clients, fd);
+    if (slot_idx >= max_clients || rx_slots == NULL)
+    {
+        remove_client_slot(epoll_fd, fd, client_fds, rx_slots, max_clients);
+        return;
+    }
+
+    for (;;)
+    {
+        size_t  need = AEGIS_TMTC_PKT_SIZE - rx_slots[slot_idx].len;
+        ssize_t nread = recv(fd, rx_slots[slot_idx].buf + rx_slots[slot_idx].len, need, 0);
+
+        if (nread == 0)
+        {
+            remove_client_slot(epoll_fd, fd, client_fds, rx_slots, max_clients);
+            return;
+        }
+        if (nread < 0)
+        {
+            if (errno == EINTR)
+                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                return;
+            remove_client_slot(epoll_fd, fd, client_fds, rx_slots, max_clients);
+            return;
+        }
+
+        rx_slots[slot_idx].len += (size_t)nread;
+        if (rx_slots[slot_idx].len == AEGIS_TMTC_PKT_SIZE)
+        {
+            t_aegis_tmtc_packet tc_pkt;
+            if (aegis_tmtc_decode_verify(rx_slots[slot_idx].buf, &tc_pkt) == 0)
+            {
+                if (out_tc_received != NULL)
+                    *out_tc_received += 1U;
+                if (out_last_tc_type != NULL)
+                    *out_last_tc_type = tc_pkt.msg_type;
+                if (tc_pkt.msg_type == (uint8_t)AEGIS_MSG_TC_SAFE_STATE)
+                    __atomic_store_n(&shm->tc_safe_state_req, 1U, __ATOMIC_RELEASE);
+            }
+            else if (out_crc_errors != NULL)
+            {
+                *out_crc_errors += 1U;
+            }
+            rx_slots[slot_idx].len = 0U;
+        }
+    }
+}
+
+int aegis_tmtc_epoll_poll_ex(int                   epoll_fd,
+                             int                   listen_fd,
+                             int                  *client_fds,
+                             t_aegis_tmtc_rx_slot *rx_slots,
+                             size_t                max_clients,
+                             t_aegis_tmtc_shm     *shm,
+                             uint32_t             *seq_counter,
+                             uint32_t             *out_tc_received,
+                             uint8_t              *out_last_tc_type,
+                             uint32_t             *out_crc_errors,
+                             int                   timeout_ms)
+{
+    struct epoll_event     events[AEGIS_TMTC_MAX_CLIENTS];
+    uint8_t                pkt_buf[AEGIS_TMTC_PKT_SIZE];
+    t_aegis_telemetry_data tel_snap;
+    uint64_t               ts_snap;
+    int                    nfds;
+    int                    idx;
+    size_t                 c_idx;
+
+    if (epoll_fd < 0 || listen_fd < 0 || client_fds == NULL || rx_slots == NULL || shm == NULL
+        || seq_counter == NULL || max_clients == 0U || max_clients > AEGIS_TMTC_MAX_CLIENTS)
+    {
+        return (EINVAL);
+    }
+
+    nfds = epoll_wait(epoll_fd, events, (int)AEGIS_TMTC_MAX_CLIENTS, timeout_ms);
+    if (nfds < 0)
+    {
+        if (errno == EINTR)
+            return (0);
+        return (errno);
+    }
+
+    for (idx = 0; idx < nfds; ++idx)
+    {
+        int fd = events[idx].data.fd;
+
+        if (fd == listen_fd)
+        {
+            for (;;)
+            {
+                int cfd = accept(listen_fd, NULL, NULL);
+                if (cfd < 0)
+                    break;
+                register_client_slot(epoll_fd, cfd, client_fds, rx_slots, max_clients);
+            }
+        }
+        else if ((events[idx].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0U)
+        {
+            remove_client_slot(epoll_fd, fd, client_fds, rx_slots, max_clients);
+        }
+        else if ((events[idx].events & EPOLLIN) != 0U)
+        {
+            process_client_rx(epoll_fd,
+                              fd,
+                              client_fds,
+                              rx_slots,
+                              max_clients,
+                              shm,
+                              out_tc_received,
+                              out_last_tc_type,
+                              out_crc_errors);
+        }
+    }
+
+    /* Read tear-free SHM snapshot via seqlock and broadcast to connected GCS clients */
+    (void)memset(&tel_snap, 0, sizeof(tel_snap));
+    ts_snap = 0ULL;
+    if (aegis_shm_read_snapshot(shm, &tel_snap, NULL, NULL, &ts_snap) != 0)
+        return (0);
+
+    *seq_counter += 1U;
+    if (aegis_tmtc_encode(pkt_buf,
+                          (uint8_t)AEGIS_MSG_TM_TELEMETRY,
+                          *seq_counter,
+                          (uint32_t)(ts_snap / 1000000ULL),
+                          &tel_snap)
+        == 0)
+    {
+        for (c_idx = 0U; c_idx < max_clients; ++c_idx)
+        {
+            if (client_fds[c_idx] >= 0)
+            {
+                if (send_packet_nonblock(client_fds[c_idx], pkt_buf, AEGIS_TMTC_PKT_SIZE) != 0)
+                {
+                    remove_client_slot(
+                        epoll_fd, client_fds[c_idx], client_fds, rx_slots, max_clients);
+                }
+            }
+        }
+    }
+
+    return (0);
 }
 
 /*
@@ -236,80 +446,18 @@ int aegis_tmtc_epoll_poll_once(int               epoll_fd,
                                uint8_t          *out_last_tc_type,
                                int               timeout_ms)
 {
-    struct epoll_event events[AEGIS_TMTC_MAX_CLIENTS];
-    uint8_t            pkt_buf[AEGIS_TMTC_PKT_SIZE];
-    int                nfds;
-    int                idx;
-    size_t             c_idx;
+    t_aegis_tmtc_rx_slot local_slots[AEGIS_TMTC_MAX_CLIENTS];
 
-    if (epoll_fd < 0 || listen_fd < 0 || client_fds == NULL || shm == NULL || seq_counter == NULL)
-        return (EINVAL);
-
-    nfds = epoll_wait(epoll_fd, events, (int)AEGIS_TMTC_MAX_CLIENTS, timeout_ms);
-    if (nfds < 0 && errno != EINTR)
-        return (errno);
-
-    for (idx = 0; idx < nfds; ++idx)
-    {
-        int fd = events[idx].data.fd;
-
-        if (fd == listen_fd)
-        {
-            for (;;)
-            {
-                int cfd = accept(listen_fd, NULL, NULL);
-                if (cfd < 0)
-                    break;
-                register_client_slot(epoll_fd, cfd, client_fds, max_clients);
-            }
-        }
-        else if ((events[idx].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0U)
-        {
-            remove_client_slot(epoll_fd, fd, client_fds, max_clients);
-        }
-        else if ((events[idx].events & EPOLLIN) != 0U)
-        {
-            ssize_t nread = recv(fd, pkt_buf, AEGIS_TMTC_PKT_SIZE, 0);
-            if (nread <= 0)
-            {
-                if (nread == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-                    remove_client_slot(epoll_fd, fd, client_fds, max_clients);
-            }
-            else if (nread == (ssize_t)AEGIS_TMTC_PKT_SIZE)
-            {
-                t_aegis_tmtc_packet tc_pkt;
-                if (aegis_tmtc_decode_verify(pkt_buf, &tc_pkt) == 0)
-                {
-                    if (out_tc_received != NULL)
-                        *out_tc_received += 1U;
-                    if (out_last_tc_type != NULL)
-                        *out_last_tc_type = tc_pkt.msg_type;
-                    if (tc_pkt.msg_type == (uint8_t)AEGIS_MSG_TC_SAFE_STATE)
-                        __atomic_store_n(&shm->tc_safe_state_req, 1U, __ATOMIC_RELEASE);
-                }
-            }
-        }
-    }
-
-    /* Broadcast current SHM telemetry snapshot to connected GCS clients */
-    *seq_counter += 1U;
-    if (aegis_tmtc_encode(pkt_buf,
-                          (uint8_t)AEGIS_MSG_TM_TELEMETRY,
-                          *seq_counter,
-                          (uint32_t)(shm->timestamp_ns / 1000000ULL),
-                          &shm->telemetry)
-        == 0)
-    {
-        for (c_idx = 0U; c_idx < max_clients; ++c_idx)
-        {
-            if (client_fds[c_idx] >= 0)
-            {
-                ssize_t sent = send(client_fds[c_idx], pkt_buf, AEGIS_TMTC_PKT_SIZE, MSG_NOSIGNAL);
-                if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
-                    remove_client_slot(epoll_fd, client_fds[c_idx], client_fds, max_clients);
-            }
-        }
-    }
-
-    return (0);
+    (void)memset(local_slots, 0, sizeof(local_slots));
+    return (aegis_tmtc_epoll_poll_ex(epoll_fd,
+                                     listen_fd,
+                                     client_fds,
+                                     local_slots,
+                                     max_clients,
+                                     shm,
+                                     seq_counter,
+                                     out_tc_received,
+                                     out_last_tc_type,
+                                     NULL,
+                                     timeout_ms));
 }

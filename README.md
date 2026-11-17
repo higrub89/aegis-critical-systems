@@ -122,57 +122,59 @@ The FFI boundary between C17 and Rust `no_std` is aligned to 64 bytes and sized 
 | [0x00..0x03] can_id (uint32_t standard/extended CAN identifier)                 |
 | [0x04]       len (uint8_t payload length, 0..64)                                |
 | [0x05]       flags (uint8_t CAN-FD bit flags: BRS, ESI)                         |
-| [0x06..0x07] __res0 / __pad (uint8_t[2] kernel alignment padding)               |
+| [0x06..0x07] __res0 / __res1 (uint8_t[2] kernel alignment padding)              |
 | [0x08..0x3F] data[0..55] (CAN-FD payload segment 0)                             |
 +---------------------------------------------------------------------------------+
 | Offset 0x40 - 0x7F (64 Bytes): Cache Line 1 (Payload Tail + Timestamps & HMAC)  |
 | [0x40..0x47] data[56..63] (CAN-FD payload segment 1)                            |
-| [0x48..0x4F] rx_timestamp_ns (uint64_t monotonic reception timestamp)          |
-| [0x50..0x57] auth_timestamp_ns (uint64_t post-authentication timestamp)        |
-| [0x58..0x5B] seq_counter (uint32_t monotonic sequence index)                   |
-| [0x5C..0x5D] dtc_code (uint16_t diagnostic trouble code)                       |
-| [0x5E]       status_flags (uint8_t verification status: 0x01 AUTH, 0x02 PARSED) |
-| [0x5F]       reserved_pad (uint8_t alignment spacer)                           |
+| [0x48..0x4F] rx_timestamp_ns (uint64_t monotonic reception timestamp)           |
+| [0x50..0x57] auth_timestamp_ns (uint64_t post-authentication timestamp)         |
+| [0x58..0x5B] seq_counter (uint32_t monotonic sequence index)                    |
+| [0x5C..0x5D] status_flags (uint16_t verification bitmask: VALID_LEN, AUTH, ...) |
+| [0x5E..0x5F] dtc_code (uint16_t diagnostic trouble code)                        |
 | [0x60..0x7F] hmac_tag[32] (256-bit RFC 4231 HMAC-SHA256 authentication tag)     |
 +---------------------------------------------------------------------------------+
 ```
 
 ### 64-Byte POSIX Shared Memory Bus Snapshot (`t_aegis_tmtc_shm`)
-Atomic inter-process bridge linking the C17 cyclic executive, lock-free HUMS, and the TM/TC epoll daemon. Exactly one cache line in size.
+Seqlock-protected atomic inter-process bridge linking the C17 cyclic executive, lock-free HUMS, and the TM/TC epoll daemon. Exactly one cache line in size.
 
 ```text
 +---------------------------------------------------------------------------------+
 | Offset 0x00 - 0x3F (64 Bytes): Single Cache Line POSIX SHM Snapshot             |
-| [0x00..0x03] seqlock (atomic uint32_t sequence lock; odd = update in progress)  |
-| [0x04..0x07] status_word (uint32_t system state & contactor bitmask)           |
-| [0x08..0x0F] timestamp_ns (uint64_t monotonic nanoseconds)                      |
-| [0x10..0x13] pack_voltage_mv (uint32_t battery pack millivolts)                 |
-| [0x14..0x17] pack_current_ma (int32_t battery pack milliamperes)                |
-| [0x18..0x19] max_cell_temp_dc (int16_t decidegrees Celsius, 0.1 deg C)          |
-| [0x1A]       contactor_state (uint8_t: 0=OPEN, 1=PRECHARGE, 2=CLOSED, 3=FAULT)  |
-| [0x1B]       fault_mask (uint8_t bitfield: 0x01 OV, 0x02 UV, 0x04 OT, 0x08 OC)  |
-| [0x1C..0x1F] dtc_code (uint32_t active diagnostic trouble code)                 |
-| [0x20..0x23] tc_safe_state_req (atomic uint32_t ground command latch)           |
-| [0x24..0x27] tc_ack (atomic uint32_t command acknowledgment counter)            |
-| [0x28..0x3F] reserved_padding[24] (explicit cache line tail pad)                |
+| [0x00..0x03] seq_lock (uint32_t even/odd seqlock; odd = writer update active)   |
+| [0x04..0x05] gw_mode (uint16_t: 0=INIT, 1=OPERATIONAL, 2=SAFE_STATE)            |
+| [0x06..0x07] last_dtc (uint16_t active diagnostic trouble code)                 |
+| [0x08..0x0B] tc_safe_state_req (uint32_t atomic ground command latch)           |
+| [0x0C..0x0F] tc_ack (uint32_t atomic command acknowledgment counter)            |
+| [0x10..0x17] timestamp_ns (uint64_t monotonic nanoseconds)                      |
+| [0x18..0x1B] telemetry.pack_voltage_mv (uint32_t battery pack millivolts)       |
+| [0x1C..0x1F] telemetry.pack_current_ma (int32_t battery pack milliamperes)      |
+| [0x20..0x21] telemetry.max_cell_temp_dc (int16_t decidegrees Celsius, 0.1 C)    |
+| [0x22]       telemetry.contactor_state (uint8_t: 0=OPEN, 1=PRECHARGE, 2=CLOSED) |
+| [0x23]       telemetry.fault_mask (uint8_t bitfield: 0x01 OT, 0x02 OC)          |
+| [0x24..0x3F] cache-line tail padding (28 bytes to alignas(64))                  |
 +---------------------------------------------------------------------------------+
 ```
 
 ### 32-Byte Ground Station Wire Frame (TM/TC Binary Datagram)
-Compact, endianness-explicit network datagram exchanged over TCP/UDP between the C17 epoll daemon and Java 21 GCS console.
+Compact, little-endian network datagram exchanged over TCP between the C17 epoll daemon and Java 21 GCS console.
 
 ```text
 +---------------------------------------------------------------------------------+
-| Offset 0x00 - 0x1F (32 Bytes): Telemetry Datagram                               |
-| [0x00..0x03] sync_word (0xAE615001 big-endian sync preamble)                    |
-| [0x04..0x07] msg_type (0x00010001 TM_PROPULSION, 0x00020001 TC_SAFE_STATE)     |
-| [0x08..0x0F] seq_num (uint64_t monotonic datagram sequence index)               |
-| [0x10..0x13] pack_voltage_mv (uint32_t propulsion pack millivolts)              |
-| [0x14..0x15] max_temp_dc (int16_t maximum cell temperature, decidegrees C)      |
+| Offset 0x00 - 0x1F (32 Bytes): Little-Endian TM/TC Datagram                     |
+| [0x00..0x03] magic (0xAE615001 little-endian sync preamble)                     |
+| [0x04]       version (uint8_t protocol version = 1)                             |
+| [0x05]       msg_type (uint8_t: 1=TM_TELEMETRY, 2=TC_SAFE_STATE, 3=TC_RESET)    |
+| [0x06..0x07] reserved (uint16_t alignment field = 0)                            |
+| [0x08..0x0B] seq (uint32_t monotonic datagram sequence index)                   |
+| [0x0C..0x0F] pack_voltage_mv (uint32_t propulsion pack millivolts)              |
+| [0x10..0x13] pack_current_ma (int32_t propulsion pack milliamperes)             |
+| [0x14..0x15] max_cell_temp_dc (int16_t maximum cell temperature, decidegrees C) |
 | [0x16]       contactor_state (uint8_t contactor switch status)                  |
 | [0x17]       fault_mask (uint8_t active MIL-STD-882E hazard bitfield)           |
-| [0x18..0x1B] timestamp_ms (uint32_t epoch timestamp in milliseconds)            |
-| [0x1C..0x1F] crc32c (Castagnoli polynomial 0x82F63B78 hardware checksum)       |
+| [0x18..0x1B] timestamp_ms (uint32_t monotonic timestamp in milliseconds)        |
+| [0x1C..0x1F] crc32c (Castagnoli polynomial 0x82F63B78 checksum over [0..27])    |
 +---------------------------------------------------------------------------------+
 ```
 
@@ -204,12 +206,12 @@ The comparison executes in identical CPU cycle counts regardless of byte match p
 
 | Verification Gate | Target Requirement | Measured Result | Status |
 | :--- | :--- | :--- | :---: |
-| **C17 / C++23 CTest Suite** | Unit & Integration Verification | **6/6 passed** (`abi_contract`, `rust_nostd_ffi`, `gateway_cyclic_exec`, `hil_fsm_closed_loop`, `hums_lockfree`, `tmtc_epoll_crc32c`) | **PASS** |
+| **C17 / C++23 CTest Suite** | Unit & Integration Verification | **7/7 passed** (`abi_contract`, `rust_nostd_ffi`, `gateway_cyclic_exec`, `hil_fsm_closed_loop`, `hums_lockfree`, `hums_malloc_trap`, `tmtc_epoll_crc32c`) | **PASS** |
 | **Rust Workspace Tests** | `aegis-parser` & `aegis-trace` | **7/7 passed** (RFC 4231 vectors, FIPS 180-4 SHA-256, AST scanner, S1000D generator) | **PASS** |
 | **Java 21 Tactical GCS** | DAO/DTO, Virtual Threads, SQLite | **Passed** (`CRC-32C 0xE3069283`, multi-frame ingestion, emergency safe-state trip) | **PASS** |
 | **Memory Leak Audit (`Valgrind`)** | Zero Memory Leaks | **0 errors, 0 bytes leaked** across all test suites | **PASS** |
 | **Descriptor Audit (`Valgrind`)** | Zero Leaked File Descriptors | **0 leaked file descriptors** upon clean exit | **PASS** |
-| **Dynamic Allocation Trap** | Zero Heap Allocation in Hot Path | **Passed** (`--wrap=malloc` verified via `malloc_guard.c`) | **PASS** |
+| **Dynamic Allocation Trap** | Zero Heap Allocation in Hot Path | **Passed** (`--wrap={malloc,calloc,realloc}` SIGABRT trap verified empirically) | **PASS** |
 | **Sanitizers (`ASan` + `UBSan`)** | Memory Bounds & UB Freedom | **0 violations** detected across C17 and C++23 suites | **PASS** |
 | **ThreadSanitizer (`TSan`)** | Zero Data Races in Lock-Free SPSC | **0 data races** detected in multithreaded stress testing | **PASS** |
 | **Rust Panic-Free Gate (`nm -u`)** | `no_std` Determinism | **0 `core::panicking` symbols** in `libaegis_parser.a` | **PASS** |
@@ -290,3 +292,17 @@ aegis-critical-systems/
 └── 05-trace-s1000d-cli/
     └── src/                         # Rust CLI scanner and S1000D XML generator
 ```
+
+---
+
+## 8. Engineering Roadmap
+
+| Phase | Scope | Status |
+| :--- | :--- | :---: |
+| **Phase 0** | Monorepo layout, strict C17/C++23/Rust toolchain, `vcan0` setup | **DONE** |
+| **Phase 1** | DO-178C `aegis-trace` CLI & 128-byte FFI ABI contract | **DONE** |
+| **Phase 2** | Rust `no_std` HMAC parser, `PREEMPT_RT` gateway, C++23 HIL HV-BMS FSM | **DONE** |
+| **Phase 3** | Wait-free SPSC HUMS, Q15 EKF, C17 `epoll` TM/TC daemon, Java 21 GCS | **DONE** |
+| **Phase 4** | Anti-replay DO-326A, ASan/UBSan/TSan, `trace.lock` gate, GitHub Actions CI | **DONE** |
+| **Phase 5** | Lock-free Seqlock SHM, TCP fragment reassembly, `SIGABRT` trap test, full multi-process E2E | **DONE** |
+| **Phase 6** | Live `vcan0` multi-daemon harness, full S1000D XSD/BREX validation, ELF size & WCET CI gates | **PLANNED** |
