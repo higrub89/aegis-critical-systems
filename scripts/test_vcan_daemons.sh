@@ -58,10 +58,17 @@ cleanup() {
 trap cleanup EXIT
 
 sleep 0.2
-"${BUILD_DIR}/aegis_gateway_node" --iface "${IFACE}" --shm "${SHM_NAME}" --cycles 1200 --cpu 0 > "${BUILD_DIR}/vcan_gw.log" 2>&1 &
+"${BUILD_DIR}/aegis_gateway_node" --iface "${IFACE}" --shm "${SHM_NAME}" --cycles 2500 --cpu 0 > "${BUILD_DIR}/vcan_gw.log" 2>&1 &
 GW_PID=$!
 
-sleep 0.15
+# Wait deterministically until gateway node bound vcan0 & installed CAN_RAW_FILTER
+for _ in $(seq 1 30); do
+    if grep -q "Cyclic Executive STARTED" "${BUILD_DIR}/vcan_gw.log" 2>/dev/null; then
+        break
+    fi
+    sleep 0.05
+done
+
 # Inject spurious CAN-FD frames with ID 0x299; kernel CAN_RAW_FILTER (0x120/0x7FF) must drop them
 python3 - "${IFACE}" <<'PY'
 import socket, struct, sys
@@ -75,14 +82,18 @@ for _ in range(5):
 s.close()
 PY
 
-"${BUILD_DIR}/aegis_hil_sim" --iface "${IFACE}" --cycles 50 --fault thermal --fault-at 12 &
+# Run HIL simulator at 1 kHz for 1.5s: nominal for 350ms, then inject ThermalRunaway
+"${BUILD_DIR}/aegis_hil_sim" --iface "${IFACE}" --cycles 1500 --fault thermal --fault-at 350 &
 HIL_PID=$!
+
+# Allow initial nominal frames (contactor=2) to populate POSIX SHM before GCS connects
+sleep 0.15
 
 java -cp build/java com.aegis.gcs.TacticalGcsApp \
     --host 127.0.0.1 \
     --port "${PORT}" \
     --db "${DB_PATH}" \
-    --count 15
+    --count 20
 
 wait "${HIL_PID}" || true
 HIL_PID=""
@@ -100,9 +111,10 @@ fi
 rm -f "${BUILD_DIR}/vcan_gw.log"
 
 ROWS=$(sqlite3 "${DB_PATH}" "SELECT COUNT(*) FROM telemetry_audit;")
+NOMINAL_ROWS=$(sqlite3 "${DB_PATH}" "SELECT COUNT(*) FROM telemetry_audit WHERE fault_mask=0 AND contactor_state=2;")
 DTCS=$(sqlite3 "${DB_PATH}" "SELECT COUNT(*) FROM dtc_events WHERE dtc_code='DTC-0x202';")
-echo "[AEGIS-VCAN] Live vcan0 SQLite rows=${ROWS} dtc_0x202=${DTCS}"
-if [[ "${ROWS}" -lt 10 || "${DTCS}" -lt 1 ]]; then
+echo "[AEGIS-VCAN] Live vcan0 SQLite rows=${ROWS} nominal=${NOMINAL_ROWS} dtc_0x202=${DTCS}"
+if [[ "${ROWS}" -lt 15 || "${NOMINAL_ROWS}" -lt 2 || "${DTCS}" -lt 1 ]]; then
     echo "[AEGIS-VCAN] FAIL: insufficient vcan0 telemetry or missing DTC-0x202"
     exit 1
 fi
