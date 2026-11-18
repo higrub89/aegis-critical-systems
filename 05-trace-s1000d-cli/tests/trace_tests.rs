@@ -235,5 +235,5 @@ fn log_status() {
 }
 "#;
     let records = scan_source_str(code, "main.rs");
-    assert!(records.is_empty());
+    assert_eq!(records, Vec::new());
 }
