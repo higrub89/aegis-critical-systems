@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(aegis_critical_systems
-    VERSION 0.1.0
+    VERSION 1.0.0
     DESCRIPTION "Deterministic Mixed-Language Architecture for Mission-Critical Telemetry & HIL"
     LANGUAGES C CXX
 )

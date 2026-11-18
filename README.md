@@ -241,20 +241,23 @@ cd aegis-critical-systems
 
 # 2. Execute full qualification audit
 # (Compiles C17, C++23, Rust no_std, Java 21, runs CTest, Cargo test, Valgrind,
-#  nm -u panic-free symbol gate, trace.lock verification, and S1000D XML check)
+#  nm -u panic-free symbol gate, trace.lock verification, static checks, and S1000D XML check)
 make audit
 
-# 3. Run AddressSanitizer, UndefinedBehaviorSanitizer & ThreadSanitizer
+# 3. Run static formatting, Clippy, Java -Werror, and Git hygiene checks
+make static-check
+
+# 4. Run AddressSanitizer, UndefinedBehaviorSanitizer & ThreadSanitizer
 make sanitizers
 
-# 4. Generate gcov code coverage metrics
+# 5. Generate gcov code coverage metrics and verify threshold (>= 72%)
 make coverage
 
-# 5. Run end-to-end multi-process verification pipeline
+# 6. Run end-to-end multi-process verification pipeline
 # (Starts C17 epoll daemon, feeds simulated telemetry, verifies Java GCS & SQLite audit)
 ./scripts/test_e2e_pipeline.sh
 
-# 6. Run live SocketCAN vcan0 multi-daemon integration harness
+# 7. Run live SocketCAN vcan0 multi-daemon integration harness
 make test-vcan
 ```
 
