@@ -20,10 +20,13 @@ TRACE_HUMS_MD := $(REPORTS_DIR)/DO-178C-HUMS-Traceability-Matrix.md
 SRS_GCS_SPEC  := requirements/SRS-GCS-001.yaml
 S1000D_GCS    := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-04-00A-420A-A.xml
 TRACE_GCS_MD  := $(REPORTS_DIR)/DO-178C-GCS-Traceability-Matrix.md
+SRS_TRACE_SPEC := requirements/SRS-TRACE-001.yaml
+S1000D_TRACE   := $(REPORTS_DIR)/DMC-AEGIS-A-24-30-05-00A-420A-A.xml
+TRACE_TRACE_MD := $(REPORTS_DIR)/DO-178C-TRACE-Traceability-Matrix.md
 
 S1000D_XSD   := requirements/schemas/s1000d-5.0-fault-profile.xsd
 
-.PHONY: all build-c build-rust build-java test test-vcan audit trace xml-check elf-check sanitizers coverage clean fclean re
+.PHONY: all build-c build-rust build-java test test-vcan audit trace xml-check elf-check static-check sanitizers coverage clean fclean re
 
 all: build-rust build-c build-java trace
 
@@ -62,6 +65,11 @@ trace: build-rust
 		--out-xml $(S1000D_GCS) \
 		--out-matrix $(TRACE_GCS_MD)
 	@./target/release/aegis-trace scan \
+		--srs $(SRS_TRACE_SPEC) \
+		--root . \
+		--out-xml $(S1000D_TRACE) \
+		--out-matrix $(TRACE_TRACE_MD)
+	@./target/release/aegis-trace scan \
 		--srs-dir requirements \
 		--root . \
 		--check-orphans \
@@ -77,8 +85,7 @@ test: all
 test-vcan: all
 	@./scripts/test_vcan_daemons.sh $(BUILD_DIR)
 
-audit: test xml-check elf-check
-	@cargo clippy --workspace --all-targets -- -D warnings -A unknown_lints -A clippy::chunks_exact_to_as_chunks
+audit: test xml-check elf-check static-check
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
 		./$(BUILD_DIR)/test_abi_contract
 	@valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --error-exitcode=1 \
@@ -104,6 +111,9 @@ xml-check: trace
 elf-check: build-rust build-c
 	@./scripts/check_elf_budgets.sh $(BUILD_DIR) target/release/libaegis_parser.a
 
+static-check:
+	@./scripts/check_static_quality.sh
+
 sanitizers: build-rust
 	@cmake -B build-asan -S . -DCMAKE_BUILD_TYPE=Debug \
 		-DAEGIS_ENABLE_MALLOC_TRAP=OFF \
@@ -127,8 +137,7 @@ coverage: build-rust build-java
 	@cmake --build build-cov --parallel
 	@ctest --test-dir build-cov --output-on-failure
 	@./scripts/test_cli_entrypoints.sh build-cov
-	@gcov -n $$(find build-cov -path '*CMakeFiles/aegis*' -o -path '*CMakeFiles/test_*' | grep '\.gcno$$') 2>/dev/null \
-		| awk '/File .*aegis-critical-systems/{print; f=1; next} f && /Lines executed/{print; f=0}'
+	@./scripts/check_coverage.sh build-cov 72
 
 clean:
 	@rm -rf $(BUILD_DIR) build-asan build-tsan build-cov $(REPORTS_DIR)

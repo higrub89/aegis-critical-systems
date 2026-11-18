@@ -217,9 +217,23 @@ unsigned int calc_crc(void) { return 0xE3069283U; }
     let xml = generate_s1000d_fault_xml(&srs, &cov);
     assert!(verify_s1000d_brex(&xml, &srs).is_ok());
 
-    let bad_sec = xml.replace("securityClassification=\"01\"", "securityClassification=\"09\"");
+    let bad_sec = xml.replace(
+        "securityClassification=\"01\"",
+        "securityClassification=\"09\"",
+    );
     assert!(verify_s1000d_brex(&bad_sec, &srs).is_err());
 
     let bad_brex = xml.replace("infoCode=\"022\"", "infoCode=\"999\"");
     assert!(verify_s1000d_brex(&bad_brex, &srs).is_err());
+}
+
+#[test]
+fn scanner_ignores_at_req_inside_non_comment_code() {
+    let code = r#"
+fn log_status() {
+    println!("Zero orphan @req tags verified");
+}
+"#;
+    let records = scan_source_str(code, "main.rs");
+    assert!(records.is_empty());
 }

@@ -36,7 +36,12 @@ pub fn check_orphan_requirements(
 pub fn render_trace_lock(records: &[TraceRecord]) -> String {
     let mut entries: Vec<String> = records
         .iter()
-        .map(|r| format!("{}|{}|{}|{}", r.req_id, r.file_path, r.symbol_name, r.body_sha256))
+        .map(|r| {
+            format!(
+                "{}|{}|{}|{}",
+                r.req_id, r.file_path, r.symbol_name, r.body_sha256
+            )
+        })
         .collect();
     entries.sort();
     entries.dedup();
@@ -52,6 +57,9 @@ pub fn render_trace_lock(records: &[TraceRecord]) -> String {
 ///
 /// # Errors
 /// Returns [`TraceError::VerificationFailed`] on any SHA-256 drift or added/removed trace link.
+// @req SRS-TRACE-002
+// @fault DTC-0x502
+// @hazard MIL-882E-CAT-II
 pub fn verify_trace_lock(lock_content: &str, records: &[TraceRecord]) -> Result<(), TraceError> {
     let expected: Vec<&str> = lock_content
         .lines()
@@ -99,6 +107,9 @@ pub struct RequirementCoverage {
 /// # Errors
 /// Returns [`TraceError::VerificationFailed`] if any requirement is untraced or has mismatched
 /// `@fault` / `@hazard` annotations.
+// @req SRS-TRACE-001
+// @fault DTC-0x501
+// @hazard MIL-882E-CAT-II
 pub fn verify_traceability(
     srs: &SrsDocument,
     records: &[TraceRecord],
@@ -161,10 +172,7 @@ pub fn render_trace_matrix_md(srs: &SrsDocument, coverage: &[RequirementCoverage
         out,
         "| Requirement ID | DAL | Hazard Category | DTC Fault | Source Location | Symbol | Body SHA-256 (Normalized) |"
     );
-    let _ = writeln!(
-        out,
-        "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
-    );
+    let _ = writeln!(out, "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |");
 
     for cov in coverage {
         for trace in &cov.traces {
@@ -188,10 +196,7 @@ pub fn render_trace_matrix_md(srs: &SrsDocument, coverage: &[RequirementCoverage
 
 /// Renders an S1000D Issue 5.0 BREX-compliant Fault Isolation Data Module (`fault.xsd` profile).
 #[must_use]
-pub fn generate_s1000d_fault_xml(
-    srs: &SrsDocument,
-    coverage: &[RequirementCoverage],
-) -> String {
+pub fn generate_s1000d_fault_xml(srs: &SrsDocument, coverage: &[RequirementCoverage]) -> String {
     let mut xml = String::new();
     let _ = writeln!(xml, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
     let _ = writeln!(
@@ -265,6 +270,9 @@ pub fn generate_s1000d_fault_xml(
 /// # Errors
 /// Returns [`TraceError::VerificationFailed`] if mandatory BREX metadata, DMC references,
 /// FIP procedures, or 64-char SHA-256 evidence digests are missing or malformed.
+// @req SRS-TRACE-003
+// @fault DTC-0x503
+// @hazard MIL-882E-CAT-III
 pub fn verify_s1000d_brex(xml: &str, srs: &SrsDocument) -> Result<(), TraceError> {
     if !xml.contains("securityClassification=\"01\"") {
         return Err(TraceError::VerificationFailed(
@@ -361,7 +369,10 @@ fn write_ident_and_status_section(xml: &mut String, srs: &SrsDocument) {
         xml,
         "        <language languageIsoCode=\"en\" countryIsoCode=\"US\"/>"
     );
-    let _ = writeln!(xml, "        <issueInfo issueNumber=\"001\" inWork=\"00\"/>");
+    let _ = writeln!(
+        xml,
+        "        <issueInfo issueNumber=\"001\" inWork=\"00\"/>"
+    );
     let _ = writeln!(xml, "      </dmIdent>");
     let _ = writeln!(xml, "      <dmAddressItems>");
     let _ = writeln!(

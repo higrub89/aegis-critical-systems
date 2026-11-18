@@ -78,7 +78,7 @@ pub unsafe extern "C" fn aegis_rust_process_frame(
             0
         }
         Err(parser::AEGIS_DTC_PAYLOAD_BOUNDS) => -90, // -EMSGSIZE
-        Err(_) => -13,                                 // -EACCES
+        Err(_) => -13,                                // -EACCES
     }
 }
 

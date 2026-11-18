@@ -26,10 +26,10 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Rust toolchain with Clippy
+      - name: Setup Rust toolchain with Clippy and Rustfmt
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Execute full qualification audit (C17, C++23, Rust no_std, Java 21, Valgrind, S1000D)
         run: make audit

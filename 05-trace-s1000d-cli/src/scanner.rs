@@ -42,9 +42,8 @@ pub fn scan_directory(root: &Path) -> Result<Vec<TraceRecord>, TraceError> {
 }
 
 fn collect_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), TraceError> {
-    let entries = fs::read_dir(dir).map_err(|e| {
-        TraceError::Io(format!("failed to read directory {}: {e}", dir.display()))
-    })?;
+    let entries = fs::read_dir(dir)
+        .map_err(|e| TraceError::Io(format!("failed to read directory {}: {e}", dir.display())))?;
 
     for entry_res in entries {
         let entry = entry_res.map_err(|e| TraceError::Io(e.to_string()))?;
@@ -53,10 +52,12 @@ fn collect_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), TraceE
         let name_str = file_name.to_string_lossy();
 
         if path.is_dir() {
-            if matches!(
-                name_str.as_ref(),
-                ".git" | "build" | "target" | "reports" | "05-trace-s1000d-cli"
-            ) {
+            let is_trace_tests = name_str == "tests"
+                && dir.file_name().and_then(|n| n.to_str()) == Some("05-trace-s1000d-cli");
+            if matches!(name_str.as_ref(), ".git" | "target" | "reports")
+                || name_str.starts_with("build")
+                || is_trace_tests
+            {
                 continue;
             }
             collect_source_files(&path, out)?;
@@ -75,7 +76,10 @@ fn collect_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), TraceE
 /// Returns [`TraceError`] if the file cannot be read.
 pub fn scan_file(path: &Path, root: &Path) -> Result<Vec<TraceRecord>, TraceError> {
     let content = fs::read_to_string(path).map_err(|e| {
-        TraceError::Io(format!("failed to read source file {}: {e}", path.display()))
+        TraceError::Io(format!(
+            "failed to read source file {}: {e}",
+            path.display()
+        ))
     })?;
     let rel_path = path
         .strip_prefix(root)
@@ -99,20 +103,29 @@ pub fn scan_source_str(content: &str, file_label: &str) -> Vec<TraceRecord> {
     while idx < lines.len() {
         let line = lines[idx].trim();
 
-        if let Some(val) = extract_tag_value(line, "@req") {
-            pending_reqs.push((idx + 1, val));
-            idx += 1;
-            continue;
-        }
-        if let Some(val) = extract_tag_value(line, "@fault") {
-            pending_fault = val;
-            idx += 1;
-            continue;
-        }
-        if let Some(val) = extract_tag_value(line, "@hazard") {
-            pending_hazard = val;
-            idx += 1;
-            continue;
+        let is_comment = line.starts_with("/*") || line.starts_with('*') || line.starts_with("//");
+        if is_comment {
+            if let Some(val) = extract_tag_value(line, "@req") {
+                if val.starts_with("SRS-") {
+                    pending_reqs.push((idx + 1, val));
+                }
+                idx += 1;
+                continue;
+            }
+            if let Some(val) = extract_tag_value(line, "@fault") {
+                if val.starts_with("DTC-") {
+                    pending_fault = val;
+                }
+                idx += 1;
+                continue;
+            }
+            if let Some(val) = extract_tag_value(line, "@hazard") {
+                if val.starts_with("MIL-") {
+                    pending_hazard = val;
+                }
+                idx += 1;
+                continue;
+            }
         }
 
         let is_comment_or_empty = line.is_empty()

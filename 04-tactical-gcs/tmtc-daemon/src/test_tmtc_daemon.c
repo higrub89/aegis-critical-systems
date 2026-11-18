@@ -30,6 +30,16 @@ static int test_crc32c_standard_vector(void)
         (void)fprintf(stderr, "Expected 0xE3069283, got 0x%08X\n", crc);
         return (1);
     }
+    if (aegis_crc32c(NULL, 4U) != 0U || aegis_crc32c(vec, 0U) != 0U)
+    {
+        (void)fprintf(stderr, "Expected 0 for NULL/empty CRC-32C input\n");
+        return (2);
+    }
+    if (aegis_crc32c("123", 3U) == 0U || aegis_crc32c("AEGIS_CASTAGNOLI_28_BYTE_TEST", 28U) == 0U)
+    {
+        (void)fprintf(stderr, "Unexpected zero CRC-32C for valid byte buffers\n");
+        return (3);
+    }
     return (0);
 }
 

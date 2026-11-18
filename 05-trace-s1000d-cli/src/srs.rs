@@ -139,11 +139,7 @@ impl SrsDocument {
     }
 }
 
-fn apply_requirement_field<'a>(
-    req: &mut SrsRequirement,
-    key: &str,
-    val: &str,
-) -> Option<&'a str> {
+fn apply_requirement_field<'a>(req: &mut SrsRequirement, key: &str, val: &str) -> Option<&'a str> {
     match key {
         "title" => req.title = val.to_string(),
         "dal" => req.dal = val.to_string(),

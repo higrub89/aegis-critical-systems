@@ -14,3 +14,6 @@ SRS-HIL-001|02-hil-hvbms-sim/include/hvbms_safety_fsm.hpp|step_safety_fsm|b4ef7e
 SRS-HIL-002|02-hil-hvbms-sim/src/hvbms_plant.cpp|HvBmsPlant::tick_1khz|1f88d276125ad191630102713093c856856c5c037a466bb07517584eb7bd3070
 SRS-HUMS-001|03-lockfree-hums/include/spsc_ring.hpp|try_push|a2530fb43e55fda58ef5a2b7d2938ae587c059a788ec95fd3fd7d770f0a77633
 SRS-HUMS-002|03-lockfree-hums/src/q15_ekf.cpp|Q15AnomalyFilter::step|f695be43cce4659480b81a57b72800268445c4022b4955de998c0577ead63a0b
+SRS-TRACE-001|05-trace-s1000d-cli/src/s1000d.rs|verify_traceability|c9735b7b891fbf249608121a90314c41d5f91385cdaf173236581a8cc136aece
+SRS-TRACE-002|05-trace-s1000d-cli/src/s1000d.rs|verify_trace_lock|244ea22a6d1d72dc7983bdb834564503e8747d37e46c75d66459a6a7b7d6ac1b
+SRS-TRACE-003|05-trace-s1000d-cli/src/s1000d.rs|verify_s1000d_brex|a8debb10ebafa70618586bb78485c46e4e20e2e5b362fdaab7abaa8f9f9f56c7

@@ -20,10 +20,14 @@ done
 if "${BUILD_DIR}/aegis_gateway_node" --cycles bad >/dev/null 2>&1; then exit 1; fi
 if "${BUILD_DIR}/aegis_gateway_node" --cpu bad >/dev/null 2>&1; then exit 1; fi
 if "${BUILD_DIR}/aegis_gateway_node" --iface nonexistent_can0 >/dev/null 2>&1; then exit 1; fi
+if "${BUILD_DIR}/aegis_gateway_node" --shm /aegis_cli_probe --cycles 1 --cpu 0 --iface nonexistent_can0 >/dev/null 2>&1; then exit 1; fi
 if "${BUILD_DIR}/aegis_hil_sim" --cycles bad >/dev/null 2>&1; then exit 1; fi
 if "${BUILD_DIR}/aegis_hil_sim" --fault bogus >/dev/null 2>&1; then exit 1; fi
 if "${BUILD_DIR}/aegis_hil_sim" --fault-at bad >/dev/null 2>&1; then exit 1; fi
 if "${BUILD_DIR}/aegis_hil_sim" --iface nonexistent_can0 >/dev/null 2>&1; then exit 1; fi
+for fault_mode in none thermal surge emi auth; do
+    if "${BUILD_DIR}/aegis_hil_sim" --cycles 5 --fault "${fault_mode}" --fault-at 2 --iface nonexistent_can0 >/dev/null 2>&1; then exit 1; fi
+done
 if "${BUILD_DIR}/aegis_tmtc_daemon" --port 99999 >/dev/null 2>&1; then exit 1; fi
 if "${BUILD_DIR}/aegis_hums_bench" --max-p50-ns bad >/dev/null 2>&1; then exit 1; fi
 

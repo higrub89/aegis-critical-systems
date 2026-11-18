@@ -1,6 +1,7 @@
 //! Constant-Time `no_std` FIPS 180-4 SHA-256 and RFC 2104 HMAC-SHA256.
 //! Enforces zero heap allocation and zero panic paths.
 
+#[rustfmt::skip]
 const SHA256_K: [u32; 64] = [
     0x428a_2f98, 0x7137_4491, 0xb5c0_fbcf, 0xe9b5_dba5,
     0x3956_c25b, 0x59f1_11f1, 0x923f_82a4, 0xab1c_5ed5,
@@ -20,6 +21,7 @@ const SHA256_K: [u32; 64] = [
     0x90be_fffa, 0xa450_6ceb, 0xbef9_a3f7, 0xc671_78f2,
 ];
 
+#[rustfmt::skip]
 const SHA256_INIT: [u32; 8] = [
     0x6a09_e667, 0xbb67_ae85, 0x3c6e_f372, 0xa54f_f53a,
     0x510e_527f, 0x9b05_688c, 0x1f83_d9ab, 0x5be0_cd19,
@@ -108,10 +110,7 @@ impl Sha256 {
             let s0 = w15.rotate_right(7) ^ w15.rotate_right(18) ^ (w15 >> 3);
             let s1 = w2.rotate_right(17) ^ w2.rotate_right(19) ^ (w2 >> 10);
             if let Some(slot) = schedule.get_mut(idx) {
-                *slot = w16
-                    .wrapping_add(s0)
-                    .wrapping_add(w7)
-                    .wrapping_add(s1);
+                *slot = w16.wrapping_add(s0).wrapping_add(w7).wrapping_add(s1);
             }
         }
 

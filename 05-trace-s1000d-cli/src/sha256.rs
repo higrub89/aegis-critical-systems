@@ -2,6 +2,7 @@
 
 use std::fmt::Write as _;
 
+#[rustfmt::skip]
 const K: [u32; 64] = [
     0x428a_2f98, 0x7137_4491, 0xb5c0_fbcf, 0xe9b5_dba5,
     0x3956_c25b, 0x59f1_11f1, 0x923f_82a4, 0xab1c_5ed5,
@@ -21,6 +22,7 @@ const K: [u32; 64] = [
     0x90be_fffa, 0xa450_6ceb, 0xbef9_a3f7, 0xc671_78f2,
 ];
 
+#[rustfmt::skip]
 const H_INIT: [u32; 8] = [
     0x6a09_e667, 0xbb67_ae85, 0x3c6e_f372, 0xa54f_f53a,
     0x510e_527f, 0x9b05_688c, 0x1f83_d9ab, 0x5be0_cd19,

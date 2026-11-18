@@ -207,7 +207,7 @@ The comparison executes in identical CPU cycle counts regardless of byte match p
 | Verification Gate | Target Requirement | Measured Result | Status |
 | :--- | :--- | :--- | :---: |
 | **C17 / C++23 CTest Suite** | Unit & Integration Verification | **7/7 passed** (`abi_contract`, `rust_nostd_ffi`, `gateway_cyclic_exec`, `hil_fsm_closed_loop`, `hums_lockfree`, `hums_malloc_trap`, `tmtc_epoll_crc32c`) | **PASS** |
-| **Rust Workspace Tests** | `aegis-parser` & `aegis-trace` | **8/8 passed** (RFC 4231 vectors, FIPS 180-4 SHA-256, AST scanner, S1000D & BREX gate) | **PASS** |
+| **Rust Workspace Tests** | `aegis-parser` & `aegis-trace` | **9/9 passed** (RFC 4231 vectors, FIPS 180-4 SHA-256, AST scanner, S1000D & BREX gate) | **PASS** |
 | **Java 21 Tactical GCS** | DAO/DTO, Virtual Threads, SQLite | **Passed** (`CRC-32C 0xE3069283`, multi-frame ingestion, emergency safe-state trip) | **PASS** |
 | **Memory Leak Audit (`Valgrind`)** | Zero Memory Leaks | **0 errors, 0 bytes leaked** across all test suites | **PASS** |
 | **Descriptor Audit (`Valgrind`)** | Zero Leaked File Descriptors | **0 leaked file descriptors** upon clean exit | **PASS** |
@@ -217,8 +217,10 @@ The comparison executes in identical CPU cycle counts regardless of byte match p
 | **Rust Panic-Free Gate (`nm -u`)** | `no_std` Determinism | **0 `core::panicking` symbols** in `libaegis_parser.a` | **PASS** |
 | **ELF Footprint Budget Gate** | Static `.text`/`.data`/`.bss` Limits | **`aegis_parser`: 4065 B `.text`, 0 B `.data`/`.bss`**; all subsystems within budget | **PASS** |
 | **HUMS Latency / WCET Gate** | Sub-Microsecond Edge Execution | **$p50 = 50\ \text{ns}$, $p99 = 69\ \text{ns}$** ($N = 10,000$; CI gate $\le 2/5\ \mu\text{s}$) | **PASS** |
-| **S1000D Issue 5.0 XML Validation** | XSD Schema & BREX Compliance | **4/4 XML Data Modules validated** via `xmllint --schema` + `verify_s1000d_brex` | **PASS** |
-| **DO-178C Traceability Lockfile** | Cryptographic Integrity | **14/14 requirements verified** across 16 source links (`trace.lock`) | **PASS** |
+| **S1000D Issue 5.0 XML Validation** | XSD Schema & BREX Compliance | **5/5 XML Data Modules validated** via `xmllint --schema` + `verify_s1000d_brex` | **PASS** |
+| **DO-178C / DO-330 Traceability Lockfile** | Cryptographic Integrity | **17/17 requirements verified** across 19 source links (`trace.lock`) | **PASS** |
+| **Production Line Coverage (`gcov`)** | DO-178C Coverage Threshold Gate | **76.78%** (`1114/1451` production lines; CI gate $\ge 72\%$) | **PASS** |
+| **Static Quality & Format Gate** | `rustfmt`, `clippy`, `javac -Werror`, Git | **0 warnings / 0 formatting diffs / clean index** | **PASS** |
 | **Live SocketCAN `vcan0` Harness** | Multi-Daemon Closed Loop | **Passed** (`aegis_hil_sim`, `aegis_gateway_node`, `aegis_tmtc_daemon`, `TacticalGcsApp` with kernel `CAN_RAW_FILTER`) | **PASS** |
 
 ---
@@ -274,9 +276,12 @@ aegis-critical-systems/
 │   ├── SRS-HIL-001.yaml             # HIL HV-BMS simulator requirements (DAL-A)
 │   ├── SRS-HUMS-001.yaml            # Lock-free HUMS requirements (DAL-B)
 │   ├── SRS-GCS-001.yaml             # Tactical GCS requirements (DAL-C)
+│   ├── SRS-TRACE-001.yaml           # DO-330 verifier tool requirements (DAL-B)
 │   └── trace.lock                   # Cryptographic SHA-256 fingerprint lockfile
 ├── scripts/
+│   ├── check_coverage.sh            # DO-178C gcov coverage threshold gate
 │   ├── check_elf_budgets.sh         # ELF .text/.data/.bss budget verification gate
+│   ├── check_static_quality.sh      # rustfmt, clippy, javac -Werror & Git hygiene gate
 │   ├── setup_vcan.sh                # Linux SocketCAN vcan0 configuration script
 │   ├── test_cli_entrypoints.sh      # CLI entrypoint & WCET regression gate
 │   ├── test_e2e_pipeline.sh         # Multi-process E2E integration test script
@@ -315,3 +320,4 @@ aegis-critical-systems/
 | **Phase 4** | Anti-replay DO-326A, ASan/UBSan/TSan, `trace.lock` gate, GitHub Actions CI | **DONE** |
 | **Phase 5** | Lock-free Seqlock SHM, TCP fragment reassembly, `SIGABRT` trap test, full multi-process E2E | **DONE** |
 | **Phase 6** | Live `vcan0` multi-daemon harness, full S1000D XSD/BREX validation, ELF size & WCET CI gates | **DONE** |
+| **Phase 7** | DO-330 `aegis-trace` qualification (`SRS-TRACE-001`), `gcov` coverage threshold gate, static format/hygiene gates (`v1.0.0`) | **DONE** |

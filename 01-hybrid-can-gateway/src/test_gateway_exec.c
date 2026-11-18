@@ -185,6 +185,63 @@ static int test_can_filter_contract(void)
     return (0);
 }
 
+static int test_gateway_negative_contracts(void)
+{
+    _Alignas(AEGIS_CACHELINE_SIZE) static t_aegis_gw_state state;
+    const uint8_t      key[] = "AEGIS_HV_BMS_SHARED_SECRET_2026";
+    t_aegis_gw_config  cfg;
+    struct canfd_frame frame;
+    int                stop_flag;
+
+    if (aegis_rt_lock_and_pin(0, 0, NULL) != EINVAL)
+        return (1);
+    if (aegis_can_open_fd(NULL, 1) != -EINVAL)
+        return (2);
+    if (aegis_can_open_fd("", 1) != -EINVAL)
+        return (3);
+    if (aegis_can_open_fd("invalid_can_interface_name_over_ifnamsiz", 1) != -EINVAL)
+        return (4);
+
+    (void)memset(&cfg, 0, sizeof(cfg));
+    if (aegis_gw_init(NULL, &cfg) != EINVAL)
+        return (5);
+    if (aegis_gw_init(&state, NULL) != EINVAL)
+        return (6);
+    if (aegis_gw_init(&state, &cfg) != EINVAL)
+        return (7);
+    cfg.hmac_key_len = sizeof(key) - 1U;
+    (void)memcpy(cfg.hmac_key, key, cfg.hmac_key_len);
+    if (aegis_gw_init(&state, &cfg) != EINVAL)
+        return (8);
+    cfg.period_ns = 100000ULL;
+    if (aegis_gw_init(&state, &cfg) != 0)
+        return (9);
+
+    if (aegis_gw_check_antireplay(NULL, 1U) != EINVAL)
+        return (10);
+    if (aegis_gw_step_frame(NULL, &frame, 100ULL) != EINVAL)
+        return (11);
+    if (aegis_gw_step_frame(&state, NULL, 100ULL) != EINVAL)
+        return (12);
+
+    (void)memset(&frame, 0, sizeof(frame));
+    state.mode = AEGIS_GW_SAFE_STATE;
+    if (aegis_gw_step_frame(&state, &frame, 200ULL) != EOWNERDEAD)
+        return (13);
+
+    if (aegis_gw_run_loop(NULL, 0, 1U, NULL) != EINVAL)
+        return (14);
+    if (aegis_gw_run_loop(&state, -1, 1U, NULL) != EINVAL)
+        return (15);
+
+    state.mode = AEGIS_GW_OPERATIONAL;
+    stop_flag = 1;
+    if (aegis_gw_run_loop(&state, 0, 1U, &stop_flag) != 0)
+        return (16);
+
+    return (0);
+}
+
 int main(void)
 {
     int rc;
@@ -193,6 +250,12 @@ int main(void)
     if (rc != 0)
     {
         (void)fprintf(stderr, "[FAIL] test_can_filter_contract: %d\n", rc);
+        return (1);
+    }
+    rc = test_gateway_negative_contracts();
+    if (rc != 0)
+    {
+        (void)fprintf(stderr, "[FAIL] test_gateway_negative_contracts: %d\n", rc);
         return (1);
     }
     rc = test_socket_loop_and_safe_state();

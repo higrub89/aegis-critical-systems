@@ -44,9 +44,9 @@ fn parse_args() -> Result<CliConfig, TraceError> {
                 cfg.srs_paths.push(PathBuf::from(val));
             }
             "--srs-dir" => {
-                let val = args.next().ok_or_else(|| {
-                    TraceError::Parse("missing value for --srs-dir".to_string())
-                })?;
+                let val = args
+                    .next()
+                    .ok_or_else(|| TraceError::Parse("missing value for --srs-dir".to_string()))?;
                 collect_srs_dir(Path::new(&val), &mut cfg.srs_paths)?;
             }
             "--root" => {
@@ -114,7 +114,10 @@ fn write_output_file(path: &Path, content: &str) -> Result<(), TraceError> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).map_err(|e| {
-                TraceError::Io(format!("failed to create directory {}: {e}", parent.display()))
+                TraceError::Io(format!(
+                    "failed to create directory {}: {e}",
+                    parent.display()
+                ))
             })?;
         }
     }
@@ -167,15 +170,24 @@ fn run() -> Result<(), TraceError> {
     if let Some(lock_out) = &cfg.write_lock {
         let lock = render_trace_lock(&records);
         write_output_file(lock_out, &lock)?;
-        println!("[AEGIS-TRACE] Trace lockfile written to: {}", lock_out.display());
+        println!(
+            "[AEGIS-TRACE] Trace lockfile written to: {}",
+            lock_out.display()
+        );
     }
 
     if let Some(lock_in) = &cfg.verify_lock {
         let content = fs::read_to_string(lock_in).map_err(|e| {
-            TraceError::Io(format!("failed to read lockfile {}: {e}", lock_in.display()))
+            TraceError::Io(format!(
+                "failed to read lockfile {}: {e}",
+                lock_in.display()
+            ))
         })?;
         verify_trace_lock(&content, &records)?;
-        println!("[AEGIS-TRACE] Lockfile integrity verified: {}", lock_in.display());
+        println!(
+            "[AEGIS-TRACE] Lockfile integrity verified: {}",
+            lock_in.display()
+        );
     }
 
     Ok(())
