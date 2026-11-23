@@ -2,6 +2,13 @@
 
 All notable engineering milestones for **AEGIS Critical Systems** are documented in this file.
 
+## [1.0.1] - 2026-11-23
+
+### Maintenance & Release Alignment
+- Resolved `clippy::assert_is_empty` pedantic lint in `05-trace-s1000d-cli/tests/trace_tests.rs` (`85bedf1`).
+- Synchronized package metadata to `1.0.1` across `Cargo.toml` and `CMakeLists.txt`.
+- Aligned `README.md`, GitHub Project #4 (`AEGIS Critical Systems Roadmap`), and annotated release tag `v1.0.1` with current `main` HEAD.
+
 ## [1.0.0] - 2026-11-18
 
 ### Phase 7: DO-330 Tool Qualification, Coverage Thresholds & Static Gates

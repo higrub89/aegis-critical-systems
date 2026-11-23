@@ -323,4 +323,4 @@ aegis-critical-systems/
 | **Phase 4** | Anti-replay DO-326A, ASan/UBSan/TSan, `trace.lock` gate, GitHub Actions CI | **DONE** |
 | **Phase 5** | Lock-free Seqlock SHM, TCP fragment reassembly, `SIGABRT` trap test, full multi-process E2E | **DONE** |
 | **Phase 6** | Live `vcan0` multi-daemon harness, full S1000D XSD/BREX validation, ELF size & WCET CI gates | **DONE** |
-| **Phase 7** | DO-330 `aegis-trace` qualification (`SRS-TRACE-001`), `gcov` coverage threshold gate, static format/hygiene gates (`v1.0.0`) | **DONE** |
+| **Phase 7** | DO-330 `aegis-trace` qualification (`SRS-TRACE-001`), `gcov` coverage threshold gate, static format/hygiene gates (`v1.0.1`) | **DONE** |
